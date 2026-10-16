@@ -11,6 +11,11 @@ try{
     $detail=illustration_error_detail(403,json_encode(['error'=>['message'=>'Country not supported','metadata'=>['provider_name'=>'Example','raw'=>json_encode(['error'=>['message'=>'Blocked region local-test-secret sk-test-private'],'headers'=>['Authorization'=>'hidden']])]]]),'local-test-secret');
     verify_illustration(str_contains($detail,'Country not supported') && str_contains($detail,'Blocked region') && !str_contains($detail,'local-test-secret') && !str_contains($detail,'sk-test-private'),'provider error explains region denial without leaking key');
     verify_illustration(!str_contains(illustration_error_detail(403,'<html>blocked</html>','secret'),'<html>'),'non-JSON error has safe fallback');
+    foreach([false,true] as $encoded){
+        $raw=['promptFeedback'=>['blockReason'=>'OTHER'],'candidates'=>[['finishReason'=>'IMAGE_SAFETY','safetyRatings'=>[['category'=>'HARM_CATEGORY_DANGEROUS_CONTENT','blocked'=>true]],'content'=>['parts'=>[['text'=>'PRIVATE_STORY']]]]],'headers'=>['Authorization'=>'PRIVATE_HEADER']];
+        $detail=illustration_error_detail(400,json_encode(['error'=>['message'=>'Blocked','metadata'=>['raw'=>$encoded?json_encode($raw):$raw]]]),'secret');
+        verify_illustration(str_contains($detail,'OTHER')&&str_contains($detail,'IMAGE_SAFETY')&&str_contains($detail,'HARM_CATEGORY_DANGEROUS_CONTENT')&&!str_contains($detail,'PRIVATE_'),'Google block details shown without response content or headers');
+    }
     $db->exec(file_get_contents(ROOT.'/database.sql'));$db->exec(file_get_contents(ROOT.'/database.sql'));
     $db->prepare('INSERT INTO posts(title,body,slug,created_at,updated_at) VALUES(?,?,?,?,?)')->execute(['У костра',"Гена и Винни сидят у костра.\nПоследняя строка — звёзды.",'fire',now(),now()]);$p=post((int)$db->lastInsertId());
     expect_illustration_error(fn()=>illustration_enqueue($p,''));

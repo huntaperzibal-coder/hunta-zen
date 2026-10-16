@@ -96,11 +96,33 @@ function illustration_error_detail(int $code,string $body,string $key): string {
         if(is_string($error['message']??null))$parts[]=$error['message'];
         $metadata=is_array($error['metadata']??null)?$error['metadata']:[];
         if(is_string($metadata['provider_name']??null))$parts[]='Провайдер: '.$metadata['provider_name'];
-        if(is_string($metadata['raw']??null)){
-            $raw=json_decode($metadata['raw'],true);
+        if(is_string($metadata['raw']??null) || is_array($metadata['raw']??null)){
+            $raw=is_array($metadata['raw'])?$metadata['raw']:json_decode($metadata['raw'],true);
             // Provider raw JSON can contain credentials and full requests: select only its message.
             $message=is_array($raw)?($raw['error']['message']??$raw['message']??null):null;
             if(is_string($message))$parts[]=$message;
+            // Inspect only known response fields, never recurse into prompts or headers.
+            if(is_array($raw)){
+                $nodes=[$raw];
+                foreach(['error','response'] as $field)if(is_array($raw[$field]??null))$nodes[]=$raw[$field];
+                foreach($nodes as $node){
+                    $feedback=$node['promptFeedback']??$node['prompt_feedback']??[];
+                    if(is_array($feedback)){
+                        $reason=$feedback['blockReason']??$feedback['block_reason']??null;
+                        if(is_string($reason)&&preg_match('/^[A-Z_]{2,80}$/D',$reason))$parts[]='Причина блокировки: '.$reason;
+                    }
+                    foreach(array_slice(is_array($node['candidates']??null)?$node['candidates']:[],0,4) as $candidate){
+                        if(!is_array($candidate))continue;
+                        $reason=$candidate['finishReason']??$candidate['finish_reason']??null;
+                        if(is_string($reason)&&preg_match('/^[A-Z_]{2,80}$/D',$reason))$parts[]='Причина остановки: '.$reason;
+                        foreach(array_slice(is_array($candidate['safetyRatings']??null)?$candidate['safetyRatings']:[],0,8) as $rating){
+                            if(!is_array($rating)||($rating['blocked']??false)!==true)continue;
+                            $category=$rating['category']??null;
+                            if(is_string($category)&&preg_match('/^[A-Z_]{2,100}$/D',$category))$parts[]='Категория блокировки: '.$category;
+                        }
+                    }
+                }
+            }
         }
     }
     $detail=implode(' · ',array_unique($parts));
