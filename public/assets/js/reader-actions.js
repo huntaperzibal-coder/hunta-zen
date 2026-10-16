@@ -7,12 +7,7 @@
   const previous = lightbox.querySelector('.lightbox-prev');
   const next = lightbox.querySelector('.lightbox-next');
   const shareInput = shareDialog.querySelector('input');
-  const toast = document.getElementById('reader-action-status');
-  let images = [], position = 0, opener = null, toastTimer;
-  const notify = text => {
-    clearTimeout(toastTimer); toast.textContent = text;
-    toastTimer = setTimeout(() => { toast.textContent = ''; }, 3000);
-  };
+  let images = [], position = 0, opener = null;
   const draw = () => {
     const source = images[position];
     image.src = source.currentSrc || source.src;
@@ -69,16 +64,14 @@
   });
   document.querySelectorAll('[data-share]').forEach(button => { button.hidden = false; });
   document.addEventListener('click', async event => {
-    const action = event.target.closest('[data-share], [data-copy-link]');
+    const action = event.target.closest('[data-share]');
     if (action) {
       if (event.ctrlKey || event.metaKey || event.shiftKey || event.altKey) return;
       event.preventDefault();
       const box = action.closest('.story-actions');
-      if (action.hasAttribute('data-share') && navigator.share) {
+      if (navigator.share) {
         try { await navigator.share({title: box.dataset.postTitle, url: box.dataset.postUrl}); }
         catch (error) { if (error.name !== 'AbortError') showLink(box); }
-      } else if (action.hasAttribute('data-copy-link') && await copy(box.dataset.postUrl)) {
-        notify('Ссылка на пост скопирована');
       } else showLink(box);
       return;
     }
