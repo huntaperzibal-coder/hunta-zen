@@ -104,7 +104,7 @@ if ($view==='login') {
     foreach($rows as $row) echo '<tr><td>'.h($row['title']).'</td><td>'.h(['sent'=>'Отправлено','sending'=>'Проверь канал','unknown'=>'Проверь канал','failed'=>'Не отправлено'][$row['state']]??'Ещё не отправлено').'</td><td><a class="btn-edit" href="/admin.php?view=edit&amp;id='.$row['id'].'#telegram">Подготовить публикацию</a></td></tr>';
     echo '</tbody></table></div>';
 } elseif ($view==='service') {
-    echo '<h1>Обслуживание</h1><p>База: SQLite · схема '.h($db->query('SELECT max(version) FROM schema_versions')->fetchColumn()).'</p><p>Telegram: '.(!empty($config['telegram_token']) && !empty($config['telegram_channel'])?'настроен':'ещё не подключён').'</p><p>Резервная копия базы и фотографий через SSH:</p><pre>php tools/backup.php</pre><p>Обновление кода с резервной копией:</p><pre>bash tools/update.sh</pre><h2>Последние действия</h2><ul class="audit">';
+    echo '<h1>Обслуживание</h1><p>База: SQLite · схема '.h($db->query('SELECT max(version) FROM schema_versions')->fetchColumn()).'</p><p>Telegram: '.(!empty($config['telegram_token']) && !empty($config['telegram_channel'])?'настроен':'ещё не подключён').'</p><p>Резервная копия базы и фотографий через SSH:</p><pre>php tools/backup.php</pre><p>Обновление кода с резервной копией:</p><pre>~/zen-sync.sh</pre><h2>Последние действия</h2><ul class="audit">';
     foreach ($db->query('SELECT * FROM audit ORDER BY id DESC LIMIT 30') as $row) echo '<li>'.h($row['created_at']).' · '.h($row['action']).($row['post_id']?' · запись '.(int)$row['post_id']:'').'</li>';
     echo '</ul>';
 } else {

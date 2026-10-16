@@ -16,4 +16,5 @@ jobs:
       - run: php tests/core.php
       - run: php tests/auth.php
       - run: python3 tests/integration_http.py
+      - run: python3 tests/sync.py
       - run: node --check public/assets/js/editor.js
