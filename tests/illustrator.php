@@ -7,6 +7,9 @@ require dirname(__DIR__).'/app/bootstrap.php';
 function verify_illustration(bool $ok,string $message):void{if(!$ok)throw new LogicException($message);echo "OK: $message\n";}
 function expect_illustration_error(callable $call):void{try{$call();throw new LogicException('expected rejection');}catch(RuntimeException $e){}}
 try{
+    $detail=illustration_error_detail(403,json_encode(['error'=>['message'=>'Country not supported','metadata'=>['provider_name'=>'Example','raw'=>json_encode(['error'=>['message'=>'Blocked region local-test-secret sk-test-private'],'headers'=>['Authorization'=>'hidden']])]]]),'local-test-secret');
+    verify_illustration(str_contains($detail,'Country not supported') && str_contains($detail,'Blocked region') && !str_contains($detail,'local-test-secret') && !str_contains($detail,'sk-test-private'),'provider error explains region denial without leaking key');
+    verify_illustration(!str_contains(illustration_error_detail(403,'<html>blocked</html>','secret'),'<html>'),'non-JSON error has safe fallback');
     $db->exec(file_get_contents(ROOT.'/database.sql'));$db->exec(file_get_contents(ROOT.'/database.sql'));
     $db->prepare('INSERT INTO posts(title,body,slug,created_at,updated_at) VALUES(?,?,?,?,?)')->execute(['У костра',"Гена и Винни сидят у костра.\nПоследняя строка — звёзды.",'fire',now(),now()]);$p=post((int)$db->lastInsertId());
     expect_illustration_error(fn()=>illustration_enqueue($p,''));
