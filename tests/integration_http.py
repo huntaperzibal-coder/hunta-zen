@@ -84,6 +84,11 @@ with tempfile.TemporaryDirectory(prefix='hunta-http-') as tmp:
             assert 'class="story"' not in request('/?category=gena',opener=anonymous)[1],'other category excludes story'
             assert 'class="post-title"' in request('/admin.php?category=vinnie')[1],'admin category filter'
             assert 'class="post-title"' not in request('/admin.php?category=gena')[1],'admin other category'
+            assert request('/illustration-status.php?id=1',opener=anonymous)[0]==401,'illustration history private'
+            assert request('/illustration-status.php?id=1')[0]==200,'author can check illustration status'
+            settings_page=request('/admin.php?view=illustrator')[1]
+            assert 'Модель читателя' in settings_page and 'name="api_key"' in settings_page,'illustrator settings UI'
+            assert request('/admin.php?view=illustrator',{'action':'illustrator_settings','reader':'x/y','painter':'x/y'})[0]==403,'illustrator settings require csrf'
             assert request('/editor-upload.php',b'')[0]==403,'upload requires csrf'
             assert request('/editor-upload.php',b'',opener=anonymous)[0]==401,'upload requires login'
             subprocess.run([PHP,str(ROOT/'tools/backup.php')],env=env,check=True,capture_output=True)

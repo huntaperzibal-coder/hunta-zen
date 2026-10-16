@@ -111,7 +111,9 @@
     const button = pendingSubmit; pendingSubmit = null; busy = true;
     try {
       await prepareBody();
-      replay = true; busy = false; form.requestSubmit(button);
+      // Leave the original submit event before replaying it. Browsers ignore
+      // requestSubmit during that event when uploadImages resolves immediately.
+      setTimeout(() => { replay = true; busy = false; form.requestSubmit(button); }, 0);
     } catch (error) {
       status.textContent = String(error.message || error); dirty = true; busy = false;
     }

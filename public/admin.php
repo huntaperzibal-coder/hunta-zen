@@ -25,12 +25,21 @@ if ($_SERVER['REQUEST_METHOD']==='POST') {
             if ($action==='new') {
                 $stamp=now();$db->prepare('INSERT INTO posts(slug,created_at,updated_at) VALUES(?,?,?)')->execute(['draft-'.bin2hex(random_bytes(8)),$stamp,$stamp]);redirect('/admin.php?view=edit&id='.$db->lastInsertId());
             }
-            if (in_array($action,['save','autosave','publish','unpublish','upload','telegram','resolve'],true)) {
+            if ($action==='illustrator_settings') { illustration_save_settings($_POST,$_FILES);redirect('/admin.php?view=illustrator&saved=1'); }
+            if (str_starts_with($action,'illustration_cover:') || str_starts_with($action,'illustration_inline:')) {
+                [$applyKind,$applyId]=explode(':',$action,2);
+                // Validate ownership before saving editor content.
+                illustration_result((int)$applyId,(int)($_POST['id']??0));
+                $action='illustration_apply';
+            }
+            if (in_array($action,['illustrate','illustration_apply','save','autosave','publish','unpublish','upload','telegram','resolve'],true)) {
                 $id=(int)($_POST['id']??0);
                 $input=$_POST;
                 if ($action==='publish') $input['status']='published';
                 if ($action==='unpublish') $input['status']='draft';
                 $p=save_post($id,$input,$action==='autosave'); $savedRevision=$p['revision'];
+                if ($action==='illustrate') illustration_enqueue($p,(string)($_POST['illustration_wishes']??''));
+                if ($action==='illustration_apply') { $p=illustration_apply($p,(int)$applyId,$applyKind==='illustration_cover'?'cover':'inline');$savedRevision=$p['revision']; }
                 if ($action==='upload') {
                     $name=photo_upload($_FILES['photo']??[]);
                     if (($_POST['photo_kind']??'')==='inline') {
@@ -46,7 +55,7 @@ if ($_SERVER['REQUEST_METHOD']==='POST') {
                     audit('telegram:manual-check',$id);
                 }
                 if ($action==='autosave') { header('Content-Type: application/json'); echo json_encode(['revision'=>$p['revision'],'saved'=>date('H:i:s')]);exit; }
-                redirect('/admin.php?view=edit&id='.$id.'&saved=1');
+                redirect('/admin.php?view=edit&id='.$id.'&saved=1'.(in_array($action,['illustrate','illustration_apply'],true)?'#illustrations':''));
             }
             if ($action==='settings') {
                 $title=trim((string)($_POST['title']??''));if ($title==='') throw new RuntimeException('У сайта должно быть название.');
@@ -94,8 +103,12 @@ if ($view==='login') {
         } else {
             echo '<button type="submit" class="btn-main" name="action" value="telegram"'.($p['status']!=='published'?' disabled':'').'>'.(!empty($delivery['message_id'])?'Обновить сообщение в Telegram':'Отправить в Telegram').'</button>';
         }
-        echo '</details></form><script src="/assets/tinymce/tinymce.min.js?v=8.5.0" defer></script><script src="/assets/js/editor.js?v=4" defer></script>';
+        echo '</details></form>';
+        illustration_editor($p);
+        echo '<script src="/assets/tinymce/tinymce.min.js?v=8.5.0" defer></script><script src="/assets/js/editor.js?v=5" defer></script>';
     }
+} elseif ($view==='illustrator') {
+    illustration_settings_page();
 } elseif ($view==='settings') {
     echo '<p class="eyebrow">Твой уголок</p><h1>Настройки</h1><form method="post">'.csrf().'<input type="hidden" name="action" value="settings"><label>Название сайта<input type="text" class="user-input" name="title" required value="'.h(setting('title')).'"></label><label>Описание<textarea class="user-input" name="description" rows="3">'.h(setting('description')).'</textarea></label><label>Ссылка на Telegram-канал<input type="text" class="user-input" name="telegram_url" placeholder="https://t.me/channel" value="'.h(setting('telegram_url')).'"></label><label><input type="checkbox" name="indexed" value="1"'.(setting('indexed')==='1'?' checked':'').'> Разрешить индексацию поисковиками</label><button type="submit" class="btn-main">Сохранить</button></form><p class="hint">Токен бота и адрес канала для отправки хранятся в закрытом storage/config.php: telegram_token и telegram_channel. Боту нужны права публикации в канале. Не присылай токен в чат.</p>';
 } elseif ($view==='telegram') {

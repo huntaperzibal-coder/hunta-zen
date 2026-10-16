@@ -41,3 +41,12 @@ CREATE INDEX IF NOT EXISTS posts_by_category ON post_categories(category_id,post
 INSERT OR IGNORE INTO categories(slug,title,sort_order) VALUES('vinnie','Диалоги Винни',10);
 INSERT OR IGNORE INTO categories(slug,title,sort_order) VALUES('gena','Диалоги Гены',20);
 INSERT OR IGNORE INTO schema_versions VALUES(3,datetime('now'));
+
+CREATE TABLE IF NOT EXISTS illustration_jobs (
+ id INTEGER PRIMARY KEY, post_id INTEGER NOT NULL REFERENCES posts(id) ON DELETE CASCADE,
+ revision INTEGER NOT NULL, snapshot TEXT NOT NULL, state TEXT NOT NULL DEFAULT 'queued',
+ plan TEXT NOT NULL DEFAULT '', image TEXT NOT NULL DEFAULT '', error TEXT NOT NULL DEFAULT '',
+ cost REAL NOT NULL DEFAULT 0, created_at TEXT NOT NULL, updated_at TEXT NOT NULL
+);
+CREATE UNIQUE INDEX IF NOT EXISTS illustration_one_active ON illustration_jobs(post_id) WHERE state IN ('queued','planning','generating');
+INSERT OR IGNORE INTO schema_versions(version,applied_at) VALUES(4,datetime('now'));
