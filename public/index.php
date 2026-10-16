@@ -20,7 +20,7 @@ $q->bindValue($index,($current?0:($page-1)*10),PDO::PARAM_INT);$q->execute();$li
 $stories=$current?[$current]:array_slice($listed,0,10);
 $title=$current?$current['title'].' — '.setting('title'):($category?category_public_title($category['slug'],$category['title']).' — ':'').setting('title');
 page_start($title,false,$current['excerpt']??'',$current['cover']??'');
-echo '<div class="reading-layout"><aside class="reading-sidebar" aria-label="Навигация по историям"><p class="sidebar-label">Две линии</p>'.category_links('/',['category'=>$categorySlug]);
+echo '<div class="reading-layout"><aside class="reading-sidebar" aria-label="Навигация по историям">'.category_links('/',['category'=>$categorySlug]);
 if($stories){
     echo '<details class="reading-toc" open><summary>'.($current?'Другие истории':'В этой ленте').'</summary><nav aria-label="Оглавление ленты">';
     foreach(array_slice($listed,0,10) as $item){
