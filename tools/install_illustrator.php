@@ -1,6 +1,7 @@
 <?php
 declare(strict_types=1);
 if(PHP_SAPI!=='cli'){http_response_code(404);exit;}
+try {
 require dirname(__DIR__).'/app/bootstrap.php';
 if(!is_callable('exec'))throw new RuntimeException('На хостинге отключён exec. Добавь cron через панель хостинга: '.PHP_BINARY.' '.realpath(ROOT.'/tools/illustrator_worker.php'));
 $tag='# hunta-zen-illustrator-'.substr(hash('sha256',realpath(ROOT)),0,12);
@@ -18,3 +19,10 @@ try{
     if($code!==0)throw new RuntimeException('Хостинг не принял cron. Добавь через панель: '.$command);
 }finally{unlink($tmp);}
 echo "Иллюстратор подключён: проверка очереди раз в минуту. Ключ добавь в Дао → Иллюстратор.\n";
+
+} catch (Throwable $e) {
+    fwrite(STDERR,"Не удалось подключить cron: ".$e->getMessage()."\n"
+        ."Код сайта обновлён. Попробуй установку через оболочку:\n"
+        ."PHP_BIN=".escapeshellarg(PHP_BINARY)." bash ".escapeshellarg(__DIR__.'/install_illustrator.sh')."\n");
+    exit(1);
+}
