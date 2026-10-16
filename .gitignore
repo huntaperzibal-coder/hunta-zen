@@ -1,0 +1,24 @@
+# Секреты и настройки сервера
+.env
+.env.*
+!.env.example
+
+# Рабочие базы данных
+*.sqlite
+*.sqlite3
+*.db
+*.db-wal
+*.db-shm
+
+# Загруженные изображения
+/storage/
+/public/uploads/
+
+# Логи и временные файлы
+/logs/
+/tmp/
+*.log
+
+# Редакторы
+.idea/
+.vscode/
