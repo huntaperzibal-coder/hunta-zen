@@ -35,7 +35,12 @@ if ! grep -Fqx -- "$entry" "$authorized"; then
     if grep -Fq -- "$(awk '{print $2}' "$key.pub")" "$authorized"; then
         echo 'Этот ключ уже добавлен с другими правами. Проверь authorized_keys; файл не изменён.' >&2; exit 1
     fi
-    cp -p "$authorized" "$authorized.before-illustrator-$(date +%Y%m%d-%H%M%S)"
+    # A fresh private file needs no source ACL/ownership metadata (Beget denies cp -p).
+    backup=$(mktemp "$authorized.before-illustrator-XXXXXXXX")
+    cat -- "$authorized" >"$backup"
+    cmp -s -- "$authorized" "$backup" || { echo 'Не удалось проверить копию authorized_keys; ключ не добавлен.' >&2; exit 1; }
+    # Preserve a final key/comment even if the original file has no trailing newline.
+    if [[ -s "$authorized" && -n "$(tail -c 1 -- "$authorized")" ]]; then printf '\n' >>"$authorized"; fi
     printf '%s\n' "$entry" >>"$authorized"
 fi
 # Read the actual server's public host keys. Do not trust unauthenticated ssh-keyscan output.
