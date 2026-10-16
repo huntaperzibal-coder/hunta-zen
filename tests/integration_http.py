@@ -29,6 +29,12 @@ with tempfile.TemporaryDirectory(prefix='hunta-http-') as tmp:
             _,html,_=request('/admin.php');csrf=re.search(r'name="csrf" value="([^"]+)"',html)[1]
             _,html,_=request('/admin.php',{'action':'login','csrf':csrf,'login':'author','password':'test-password-only'})
             assert 'Мои истории' in html,'login'
+            assert 'class="side"' in html and 'class="layout"' in html,'Orda shell'
+            assert '/styles_core/adminka/stili_orda.css' in html and '/assets/css/app.css' not in html,'original Orda stylesheet'
+            assert request('/styles_core/adminka/stili_orda.css')[0]==200,'CSS served'
+            assert request('/assets/fonts/Manrope-Regular.woff2')[0]==200,'local font served'
+            for path,heading in [('/admin.php?view=settings','Настройки'),('/admin.php?view=telegram','Telegram'),('/admin.php?view=service','Обслуживание')]:
+                code,panel,_=request(path);assert code==200 and heading in panel,'navigation '+path
             _,html,url=request('/admin.php',{'action':'new','csrf':csrf});pid=urllib.parse.parse_qs(urllib.parse.urlparse(url).query)['id'][0]
             revision=re.search(r'name="revision" value="(\d+)"',html)[1]
             data={'action':'save','csrf':csrf,'id':pid,'revision':revision,'title':'История <script>x</script>','body':'Очень личный черновик','excerpt':'','telegram_text':''}

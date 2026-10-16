@@ -85,6 +85,7 @@ function page_start(string $title, bool $admin=false, string $description='', st
     header('X-Content-Type-Options: nosniff'); header('Referrer-Policy: same-origin');
     header("Content-Security-Policy: default-src 'self'; img-src 'self' data:; style-src 'self'; script-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'");
     if (!$indexed) header('X-Robots-Tag: noindex, nofollow');
+    if ($admin) { orda_page_start($title);return; }
     global $config;
     $canonical=rtrim($config['site_url'],'/').'/'.(isset($_GET['p'])?'?p='.rawurlencode((string)$_GET['p']):'');
     $og='<meta property="og:type" content="article"><meta property="og:title" content="'.h($title).'"><meta property="og:description" content="'.h($description ?: setting('description')).'"><meta property="og:url" content="'.h($canonical).'"><link rel="canonical" href="'.h($canonical).'">';
@@ -94,4 +95,4 @@ function page_start(string $title, bool $admin=false, string $description='', st
     else { $tg=setting('telegram_url'); if (preg_match('~^https://t\.me/[A-Za-z0-9_]+$~',$tg)) echo '<a href="'.h($tg).'">Telegram ↗</a>'; }
     echo '</nav></header><main>';
 }
-function page_end(): void { echo '</main><footer>Место для мыслей, историй и разговоров.</footer></body></html>'; }
+function page_end(): void { global $ordaPageMode; if (isset($ordaPageMode)) { orda_page_end();return; } echo '</main><footer>Место для мыслей, историй и разговоров.</footer></body></html>'; }

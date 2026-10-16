@@ -1,0 +1,88 @@
+{
+  "repository": "huntaperzibal-coder/altai-topo",
+  "commit": "01a87a5cb2cd6861de02eb0501c4f28118e2ead5",
+  "resources": [
+    {
+      "source": "styles_core/adminka/stili_orda.css",
+      "target": "public/styles_core/adminka/stili_orda.css",
+      "source_blob": "bef3fa64ee6d81a53feb7a4aae9381182e1d7b2e",
+      "adapted": false
+    },
+    {
+      "source": "assets/fonts/stylesheet.css",
+      "target": "public/assets/fonts/stylesheet.css",
+      "source_blob": "cb062dc4e982c4970a54beff7597ecc196b6d246",
+      "adapted": false
+    },
+    {
+      "source": "adminka/js/orda_confirm.js",
+      "target": "public/adminka/js/orda_confirm.js",
+      "source_blob": "79febd7f19042a79e57b26ddc2562472982db876",
+      "adapted": false
+    },
+    {
+      "source": "adminka/js/orda_flash_message.js",
+      "target": "public/adminka/js/orda_flash_message.js",
+      "source_blob": "fe464cf50f3b00be43560e69e5c2e50e51612417",
+      "adapted": false
+    },
+    {
+      "source": "adminka/js/orda_save_shortcut.js",
+      "target": "public/adminka/js/orda_save_shortcut.js",
+      "source_blob": "73708e5e942e9782f31c2f2ac992bbf3a341c505",
+      "adapted": true
+    },
+    {
+      "source": "assets/fonts/Manrope-Bold.woff2",
+      "target": "public/assets/fonts/Manrope-Bold.woff2",
+      "source_blob": "caf818ec26f1a2c34987f45f62a8eae597842721",
+      "adapted": false
+    },
+    {
+      "source": "assets/fonts/Manrope-ExtraBold.woff2",
+      "target": "public/assets/fonts/Manrope-ExtraBold.woff2",
+      "source_blob": "884fd2dfba87fd5d700838027e40de4780ba2a89",
+      "adapted": false
+    },
+    {
+      "source": "assets/fonts/Manrope-ExtraLight.woff2",
+      "target": "public/assets/fonts/Manrope-ExtraLight.woff2",
+      "source_blob": "b571066f0978521b030cecb07494dc2b4257a421",
+      "adapted": false
+    },
+    {
+      "source": "assets/fonts/Manrope-Light.woff2",
+      "target": "public/assets/fonts/Manrope-Light.woff2",
+      "source_blob": "4f401100d42530c2514c1f189a1c9b02e3bef124",
+      "adapted": false
+    },
+    {
+      "source": "assets/fonts/Manrope-Medium.woff2",
+      "target": "public/assets/fonts/Manrope-Medium.woff2",
+      "source_blob": "60163eb10e63e7a42d934b67f0d87aa80be0cdd7",
+      "adapted": false
+    },
+    {
+      "source": "assets/fonts/Manrope-Regular.woff2",
+      "target": "public/assets/fonts/Manrope-Regular.woff2",
+      "source_blob": "a612f2fdcbf6ff3e2d8c1a2b913022e636375f2d",
+      "adapted": false
+    },
+    {
+      "source": "assets/fonts/Manrope-SemiBold.woff2",
+      "target": "public/assets/fonts/Manrope-SemiBold.woff2",
+      "source_blob": "ad1f2500779ff66f7825b93050830227b88c5abe",
+      "adapted": false
+    },
+    {
+      "source": "adminka/texts/orda_icons.json",
+      "target": "app/orda_icons.json",
+      "adapted": true
+    },
+    {
+      "source": "adminka/orda.php + adminka/tools/render_orda_menu.php + adminka/login.php",
+      "target": "app/orda_layout.php + public/admin.php",
+      "adapted": true
+    }
+  ]
+}
