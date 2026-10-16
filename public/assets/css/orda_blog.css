@@ -21,3 +21,5 @@
 .illustrator>textarea.user-input{display:block;width:100%;box-sizing:border-box;font:inherit;padding:12px;margin:8px 0 16px;border:1px solid var(--orda-border);border-radius:8px;resize:vertical}.illustrator>label{display:block}
 
 .dao-editor-tip{position:fixed;z-index:100000;max-width:min(340px,calc(100vw - 32px));box-sizing:border-box;padding:10px 14px;border-radius:8px;background:#30283e;color:#fff;font:13px/1.5 Arial,sans-serif;box-shadow:0 4px 18px #0003;pointer-events:none}.dao-editor-tip[hidden]{display:none}.dao-help-open .tox-tooltip{display:none!important}
+
+.dao-editor-tip{margin:0!important;transform:none!important;max-height:180px;overflow:hidden}

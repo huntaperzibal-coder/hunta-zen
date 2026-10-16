@@ -53,7 +53,7 @@
   const tip = document.createElement('div');
   tip.id = 'dao-editor-tip'; tip.className = 'dao-editor-tip'; tip.role = 'tooltip'; tip.hidden = true;
   document.body.append(tip);
-  let current = null;
+  let current = null, timer = null, dismiss = null, target = null, keyboard = false;
   function annotate() {
     for (const [selector, help] of hints) document.querySelectorAll(selector).forEach(node => { node.dataset.help = help; });
     document.querySelectorAll('.tox-toolbar__group button').forEach(button => {
@@ -63,6 +63,7 @@
     });
   }
   function hide() {
+    clearTimeout(timer); clearTimeout(dismiss); target = null;
     if (current) {
       const ids = (current.getAttribute('aria-describedby') || '').split(/\s+/).filter(id => id && id !== tip.id);
       if (ids.length) current.setAttribute('aria-describedby', ids.join(' ')); else current.removeAttribute('aria-describedby');
@@ -75,14 +76,37 @@
     node.setAttribute('aria-describedby', ((node.getAttribute('aria-describedby') || '') + ' ' + tip.id).trim());
     const box = node.getBoundingClientRect();
     tip.style.left = Math.max(8, Math.min(box.left, innerWidth - tip.offsetWidth - 8)) + 'px';
-    tip.style.top = (box.bottom + 8 + tip.offsetHeight <= innerHeight ? box.bottom + 8 : Math.max(8, box.top - tip.offsetHeight - 8)) + 'px';
+    // Above the entire control, with an explicit gap; never cover its row.
+    const above = box.top - tip.offsetHeight - 16;
+    const below = box.bottom + 16;
+    if (above >= 8) tip.style.top = above + 'px';
+    else if (below + tip.offsetHeight <= innerHeight - 8) tip.style.top = below + 'px';
+    else { hide(); return; }
     document.body.classList.add('dao-help-open');
+    dismiss = setTimeout(hide, 4000);
   }
-  document.addEventListener('pointerover', event => { const node = event.target.closest('[data-help]'); if (node && node !== current) show(node); });
-  document.addEventListener('pointerout', event => { if (current && !current.contains(event.relatedTarget)) hide(); });
-  document.addEventListener('focusin', event => { const node = event.target.closest('[data-help]'); if (node) show(node); else hide(); });
+  function schedule(node) {
+    hide();
+    if (!node || node.disabled) return;
+    target = node;
+    timer = setTimeout(() => { if (target === node && node.isConnected) show(node); }, 700);
+  }
+  document.addEventListener('pointerover', event => {
+    if (event.pointerType === 'touch') return;
+    const node = event.target.closest('[data-help]');
+    if (node && node !== target && node !== current) schedule(node);
+  });
+  document.addEventListener('pointerout', event => {
+    const node = target || current;
+    if (node && !node.contains(event.relatedTarget)) hide();
+  });
+  document.addEventListener('pointerdown', () => { keyboard = false; hide(); }, true);
+  document.addEventListener('focusin', event => { if (keyboard) schedule(event.target.closest('[data-help]')); });
   document.addEventListener('focusout', hide);
-  document.addEventListener('keydown', event => { if (event.key === 'Escape') hide(); });
+  document.addEventListener('keydown', event => {
+    if (event.key === 'Tab') keyboard = true;
+    else hide();
+  }, true);
   document.addEventListener('scroll', hide, true); window.addEventListener('resize', hide);
   annotate();
   let pending = false;
