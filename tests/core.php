@@ -4,6 +4,7 @@ $dir=sys_get_temp_dir().'/hunta-test-'.bin2hex(random_bytes(6));mkdir($dir,0700)
 $config=['storage'=>$dir,'site_url'=>'https://example.test','login'=>'author','password_hash'=>password_hash('test-password-only',PASSWORD_DEFAULT),'telegram_token'=>'fake-token','telegram_channel'=>'@fake'];
 file_put_contents($dir.'/config.php','<?php return '.var_export($config,true).';');putenv('HUNTA_CONFIG='.$dir.'/config.php');
 require dirname(__DIR__).'/app/bootstrap.php';$db->exec(file_get_contents(ROOT.'/database.sql'));
+$db->prepare('INSERT INTO orda_users(login,password_hash) VALUES(?,?)')->execute([$config['login'],$config['password_hash']]);
 function check(bool $ok,string $name): void { if (!$ok) throw new RuntimeException('FAIL: '.$name); echo 'OK: '.$name."\n"; }
 function fails(callable $f,string $name):void{try{$f();}catch(RuntimeException $e){echo 'OK: '.$name."\n";return;}throw new RuntimeException('Expected failure: '.$name);}
 try {

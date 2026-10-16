@@ -14,5 +14,6 @@ jobs:
           extensions: pdo_sqlite, mbstring, curl, fileinfo
       - run: find app public tools tests -name '*.php' -exec php -l {} \;
       - run: php tests/core.php
+      - run: php tests/auth.php
       - run: python3 tests/integration_http.py
       - run: node --check public/assets/js/editor.js

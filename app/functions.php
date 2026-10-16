@@ -17,8 +17,17 @@ function session_open(): void {
     session_start();
     $_SESSION['csrf'] ??= bin2hex(random_bytes(32));
 }
-function authenticated(): bool { global $config; session_open(); return isset($_SESSION['auth']) && hash_equals(hash('sha256',$config['password_hash']), (string)$_SESSION['auth']) && (int)($_SESSION['expires']??0)>time(); }
-function guard(): void { if (!authenticated()) { header('Location: /admin.php?view=login',true,303); exit; } $_SESSION['expires']=time()+43200; }
+function authenticated(): bool {
+    session_open();
+    $login=trim((string)($_SESSION['user_login']??''));
+    if (empty($_SESSION['user_id']) || $login==='') return false;
+    $user=ordaFindUser($login);
+    if (!$user || !isset($_SESSION['orda_pw_fp']) || !hash_equals(ordaGuardPasswordFingerprint($user['password_hash']),(string)$_SESSION['orda_pw_fp'])) {
+        unset($_SESSION['user_id'],$_SESSION['user_login'],$_SESSION['orda_pw_fp']);return false;
+    }
+    return true;
+}
+function guard(): void { if (!authenticated()) { header('Location: /admin.php?view=login',true,303);exit; } }
 function csrf(): string { session_open(); return '<input type="hidden" name="csrf" value="'.h($_SESSION['csrf']).'">'; }
 function verify_csrf(): void { session_open(); if (!hash_equals($_SESSION['csrf'],(string)($_POST['csrf']??''))) { http_response_code(403); exit('Сессия формы устарела. Обнови страницу.'); } }
 function redirect(string $url): never { header('Location: '.$url,true,303); exit; }

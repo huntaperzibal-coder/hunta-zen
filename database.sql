@@ -20,3 +20,12 @@ INSERT OR IGNORE INTO settings VALUES('title','Гена и Винни');
 INSERT OR IGNORE INTO settings VALUES('description','Разговоры о жизни и обо всём, что в ней происходит.');
 INSERT OR IGNORE INTO settings VALUES('telegram_url','');
 INSERT OR IGNORE INTO settings VALUES('indexed','0');
+
+CREATE TABLE IF NOT EXISTS orda_users (
+ id INTEGER PRIMARY KEY, login TEXT NOT NULL UNIQUE, password_hash TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS orda_auth_attempts (
+ id INTEGER PRIMARY KEY AUTOINCREMENT, scope TEXT NOT NULL, key_hash TEXT NOT NULL, created_at INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_orda_auth_attempts_key ON orda_auth_attempts(scope,key_hash,created_at);
+INSERT OR IGNORE INTO schema_versions VALUES(2,datetime('now'));

@@ -7,16 +7,15 @@ $action=(string)($_POST['action']??''); $view=(string)($_GET['view']??'list'); $
 if ($_SERVER['REQUEST_METHOD']==='POST') {
     verify_csrf();
     if ($action==='login') {
-        $address=hash('sha256',(string)($_SERVER['REMOTE_ADDR']??''));
-        $q=$db->prepare('SELECT * FROM login_attempts WHERE address=?');$q->execute([$address]);$attempt=$q->fetch();
-        if ($attempt && $attempt['blocked_until']>time()) $error='Слишком много попыток. Попробуй через 15 минут.';
-        elseif (hash_equals($config['login'],(string)($_POST['login']??'')) && password_verify((string)($_POST['password']??''),$config['password_hash'])) {
-            session_regenerate_id(true); $_SESSION['auth']=hash('sha256',$config['password_hash']);$_SESSION['expires']=time()+43200;
-            $db->prepare('DELETE FROM login_attempts WHERE address=?')->execute([$address]); audit('login');redirect('/admin.php');
+        $ip=(string)($_SERVER['REMOTE_ADDR']??'');
+        $login=trim((string)($_POST['login']??''));$loginKey=mb_strtolower($login,'UTF-8');
+        $wait=max(ordaThrottleBlockedSeconds('login_ip',$ip),ordaThrottleBlockedSeconds('login_user',$loginKey));
+        $user=ordaFindUser($login);
+        if ($wait>0) $error='Слишком много неудачных попыток. Попробуй через '.(int)ceil($wait/60).' мин.';
+        elseif ($user && password_verify(trim((string)($_POST['password']??'')),$user['password_hash'])) {
+            ordaThrottleClear('login_user',$loginKey);ordaLoginSession($user['login'],$user['password_hash']);audit('login');redirect('/admin.php');
         } else {
-            $count=($attempt && (int)$attempt['blocked_until']>0 && (int)$attempt['blocked_until']<=time())?1:(int)($attempt['attempts']??0)+1;
-            $db->prepare('INSERT INTO login_attempts(address,attempts,blocked_until) VALUES(?,?,?) ON CONFLICT(address) DO UPDATE SET attempts=excluded.attempts,blocked_until=excluded.blocked_until')->execute([$address,$count,$count>=5?time()+900:0]);
-            $error='Логин или пароль не подошли.';
+            ordaThrottleFail('login_ip',$ip);ordaThrottleFail('login_user',$loginKey);$error='Неверный логин или пароль';
         }
         $view='login';
     } else {

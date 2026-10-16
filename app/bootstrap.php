@@ -24,4 +24,5 @@ date_default_timezone_set('Asia/Novosibirsk');
 $db = new PDO('sqlite:' . $storage . '/blog.sqlite', null, null, [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION, PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC]);
 $db->exec('PRAGMA foreign_keys=ON; PRAGMA busy_timeout=5000;');
 require_once __DIR__ . '/functions.php';
+require_once __DIR__ . '/orda_auth.php';
 require_once __DIR__ . '/telegram.php';
