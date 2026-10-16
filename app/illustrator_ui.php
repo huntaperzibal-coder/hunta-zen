@@ -41,6 +41,7 @@ function illustration_settings_page(): void {
         echo '<p>Состояние: '.h(['queued'=>'ожидает Actions','running'=>'запрос выполняется','done'=>'получено изображение','failed'=>'проверка не завершена'][setting('illustrator_probe_state')]??'ещё не запускалась').'. Обнови страницу для результата.</p>';
         $probe=json_decode(setting('illustrator_probe_result','{}'),true);
         if(is_array($probe)&&isset($probe['time']))echo '<p>'.h($probe['time']).' · Стоимость: $'.h((string)$probe['cost']).'</p><p>'.h($probe['error']).'</p>';
+        if(is_array($probe)&&preg_match('/^[a-f0-9]{32}\.(png|jpg|webp)$/D',(string)($probe['image']??'')))echo '<p><a href="'.h(photo_url($probe['image'])).'" target="_blank" rel="noopener"><img style="max-width:100%;max-height:640px" src="'.h(photo_url($probe['image'])).'" alt="Проверка художника: заснеженная равнина на рассвете"></a></p>';
         echo '</section>';
     }
     illustration_actions_setup();

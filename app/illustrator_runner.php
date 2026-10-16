@@ -8,7 +8,7 @@ function illustration_actions_execute(array $packet,?callable $transport=null): 
             $result=$transport('images',['model'=>'google/gemini-3.1-flash-image','n'=>1,'prompt'=>'Заснеженная равнина на рассвете. Мягкая акварель. Без людей, животных и надписей.'],$packet['api_key']);
             if(!is_string($result['data'][0]['b64_json']??null))throw new RuntimeException('Ответ не содержит изображения.');
             illustration_store_image($result['data'][0]['b64_json']);
-            return ['state'=>'done','cost'=>max(0,(float)($result['usage']['cost']??0)),'error'=>''];
+            return ['state'=>'done','cost'=>max(0,(float)($result['usage']['cost']??0)),'error'=>'','image_b64'=>$result['data'][0]['b64_json']];
         }catch(RuntimeException $e){return ['state'=>'failed','cost'=>0,'error'=>$e->getMessage()];}
     }
 $db->exec(file_get_contents(ROOT.'/database.sql'));

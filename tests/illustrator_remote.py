@@ -53,5 +53,12 @@ illustration_enqueue(post((int)$db->lastInsertId()),'Тёплый свет');'''
         assert bridge.call({'op':'probe_finish','lease':probe['lease'],'result':{'state':'failed','error':'test local-test-secret','cost':0}})['ok']
         saved=json.loads(db.execute("SELECT value FROM settings WHERE key='illustrator_probe_result'").fetchone()[0])
         assert saved['state']=='failed' and 'local-test-secret' not in saved['error']
+        db.execute("INSERT OR REPLACE INTO settings(key,value) VALUES('illustrator_probe_state','queued')");db.commit()
+        probe=bridge.call({'op':'probe_claim'})['probe']
+        delivery={'op':'probe_finish','lease':probe['lease'],'result':result}
+        assert bridge.call(delivery)['ok']
+        saved=json.loads(db.execute("SELECT value FROM settings WHERE key='illustrator_probe_result'").fetchone()[0])
+        assert saved['state']=='done' and (site/'photos'/saved['image']).is_file(),'diagnostic image delivered'
+        assert bridge.call(delivery)['already_saved'],'diagnostic delivery idempotent'
         db.close()
 print('OK: private snapshot, real offline worker, delivery idempotency, lease authentication, unchanged author text, stale task protection')

@@ -25,10 +25,13 @@ function illustration_bridge(array $request): array {
         }
         if($op==='probe_finish'){
             if(!hash_equals(setting('illustrator_probe_lease','missing'),hash('sha256',(string)($request['lease']??''))))throw new RuntimeException('Нет разрешения.');
+            if(in_array(setting('illustrator_probe_state'),['done','failed'],true))return ['ok'=>true,'already_saved'=>true];
             $result=$request['result']??[];
             $state=($result['state']??'')==='done'?'done':'failed';
             $error=mb_substr(str_replace(illustration_key(),'[ключ скрыт]',(string)($result['error']??'')),0,1600);
-            $value=json_encode(['state'=>$state,'cost'=>max(0,(float)($result['cost']??0)),'error'=>$error,'time'=>now()],JSON_UNESCAPED_UNICODE|JSON_THROW_ON_ERROR);
+            $image='';
+            if($state==='done')$image=illustration_store_image((string)($result['image_b64']??''));
+            $value=json_encode(['image'=>$image,'state'=>$state,'cost'=>max(0,(float)($result['cost']??0)),'error'=>$error,'time'=>now()],JSON_UNESCAPED_UNICODE|JSON_THROW_ON_ERROR);
             $db->prepare('INSERT OR REPLACE INTO settings(key,value) VALUES(?,?)')->execute(['illustrator_probe_result',$value]);
             $db->prepare('INSERT OR REPLACE INTO settings(key,value) VALUES(?,?)')->execute(['illustrator_probe_state',$state]);
             return ['ok'=>true];
