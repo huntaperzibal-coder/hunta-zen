@@ -77,6 +77,9 @@ with tempfile.TemporaryDirectory(prefix='hunta-http-') as tmp:
             public=request('/?p=istoriya-script-x-script',opener=anonymous)[1]
             assert '<h2>Подзаголовок</h2>' in public and '<strong>Форматирование</strong>' in public,'formatted publication'
             assert 'onerror=' not in public and '<script>alert(1)' not in public,'server sanitizes HTML'
+            feed=request('/',opener=anonymous)[1]
+            assert '<strong>Форматирование</strong>' in feed and '<h2>Подзаголовок</h2>' in feed,'feed contains entire rich post'
+            assert 'reading-sidebar' in feed and 'Читать историю →' not in feed and '<section class="intro">' not in feed,'compact feed has sidebar without duplicate introduction or excerpt links'
             saved_revision=json.loads(result)['revision']
             category_id=re.search(r'<option value="(\d+)"[^>]*>Диалоги Винни</option>',html)[1]
             code,result,_=request('/admin.php',{**rich,'revision':saved_revision,'category_id':category_id});assert code==200,result

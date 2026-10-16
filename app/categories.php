@@ -16,6 +16,6 @@ function category_links(string $base,array $query=[]): string {
     $selected=(string)($query['category']??'');unset($query['category']);
     $url=$base.($query?'?'.http_build_query($query):'');
     $html='<nav class="category-tabs" aria-label="Категории"><a href="'.h($url).'"'.($selected===''?' class="active" aria-current="page"':'').'>Все категории</a>';
-    foreach(post_categories() as $c){$href=$base.'?'.http_build_query($query+['category'=>$c['slug']]);$html.='<a href="'.h($href).'"'.($selected===$c['slug']?' class="active" aria-current="page"':'').'>'.($base==='/'?h(category_public_title($c['slug'],$c['title'])).(in_array($c['slug'],['gena','vinnie'],true)?'<small style="display:block;margin-top:3px;font-size:11px">'.h($c['title']).'</small>':''):h($c['title'])).'</a>';}
+    foreach(post_categories() as $c){$href=$base.'?'.http_build_query($query+['category'=>$c['slug']]);$html.='<a href="'.h($href).'"'.($selected===$c['slug']?' class="active" aria-current="page"':'').'>'.($base==='/'?h(category_public_title($c['slug'],$c['title'])).(in_array($c['slug'],['gena','vinnie'],true)?'<small class="category-caption">'.h($c['title']).'</small>':''):h($c['title'])).'</a>';}
     return $html.'</nav>';
 }
