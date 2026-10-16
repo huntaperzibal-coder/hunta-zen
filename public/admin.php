@@ -25,19 +25,30 @@ if ($_SERVER['REQUEST_METHOD']==='POST') {
             if ($action==='new') {
                 $stamp=now();$db->prepare('INSERT INTO posts(slug,created_at,updated_at) VALUES(?,?,?)')->execute(['draft-'.bin2hex(random_bytes(8)),$stamp,$stamp]);redirect('/admin.php?view=edit&id='.$db->lastInsertId());
             }
-            if ($action==='illustrator_settings') { illustration_save_settings($_POST,$_FILES);redirect('/admin.php?view=illustrator&saved=1'); }
+            if ($action==='illustrator_download') {
+                $kind=(string)($_POST['kind']??'');
+                if(!in_array($kind,['key','hosts'],true))throw new RuntimeException('Файл не найден.');
+                if($kind==='key' && (($_SERVER['HTTPS']??'')!== 'on') && (int)($_SERVER['SERVER_PORT']??0)!==443)throw new RuntimeException('Для скачивания приватного ключа открой админку по HTTPS. Можно также скачать файл через защищённый файловый менеджер Beget.');
+                $file=$storage.($kind==='key'?'/illustrator-actions-key':'/illustrator-actions-known-hosts');
+                if(!is_file($file))throw new RuntimeException('Сначала подключи Actions через SSH.');
+                header('Content-Type: application/octet-stream');header('Cache-Control: no-store');
+                header('Content-Disposition: attachment; filename="'.($kind==='key'?'hunta-illustrator-key.txt':'hunta-illustrator-known-hosts.txt').'"');
+                readfile($file);exit;
+            }
+            if ($action==='illustrator_settings') { illustration_save_settings($_POST,$_FILES);illustration_save_github_token((string)($_POST['github_token']??''));redirect('/admin.php?view=illustrator&saved=1'); }
             if (str_starts_with($action,'illustration_cover:') || str_starts_with($action,'illustration_inline:')) {
                 [$applyKind,$applyId]=explode(':',$action,2);
                 // Validate ownership before saving editor content.
                 illustration_result((int)$applyId,(int)($_POST['id']??0));
                 $action='illustration_apply';
             }
-            if (in_array($action,['illustrate','illustration_apply','save','autosave','publish','unpublish','upload','telegram','resolve'],true)) {
+            if (in_array($action,['illustration_dispatch','illustrate','illustration_apply','save','autosave','publish','unpublish','upload','telegram','resolve'],true)) {
                 $id=(int)($_POST['id']??0);
                 $input=$_POST;
                 if ($action==='publish') $input['status']='published';
                 if ($action==='unpublish') $input['status']='draft';
                 $p=save_post($id,$input,$action==='autosave'); $savedRevision=$p['revision'];
+                if ($action==='illustration_dispatch') illustration_dispatch();
                 if ($action==='illustrate') illustration_enqueue($p,(string)($_POST['illustration_wishes']??''));
                 if ($action==='illustration_apply') { $p=illustration_apply($p,(int)$applyId,$applyKind==='illustration_cover'?'cover':'inline');$savedRevision=$p['revision']; }
                 if ($action==='upload') {
@@ -55,7 +66,7 @@ if ($_SERVER['REQUEST_METHOD']==='POST') {
                     audit('telegram:manual-check',$id);
                 }
                 if ($action==='autosave') { header('Content-Type: application/json'); echo json_encode(['revision'=>$p['revision'],'saved'=>date('H:i:s')]);exit; }
-                redirect('/admin.php?view=edit&id='.$id.'&saved=1'.(in_array($action,['illustrate','illustration_apply'],true)?'#illustrations':''));
+                redirect('/admin.php?view=edit&id='.$id.'&saved=1'.(in_array($action,['illustration_dispatch','illustrate','illustration_apply'],true)?'#illustrations':''));
             }
             if ($action==='settings') {
                 $title=trim((string)($_POST['title']??''));if ($title==='') throw new RuntimeException('У сайта должно быть название.');

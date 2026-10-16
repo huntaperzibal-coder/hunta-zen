@@ -5,6 +5,6 @@ require dirname(__DIR__).'/app/bootstrap.php';
 $lock=fopen($storage.'/illustrator.lock','c');
 if(!$lock || !flock($lock,LOCK_EX|LOCK_NB))exit;
 try{
-    file_put_contents($storage.'/illustrator-heartbeat',(string)time(),LOCK_EX);
-    illustration_run_one();
+    if(illustration_backend()==='actions') illustration_remote_expire();
+    else { file_put_contents($storage.'/illustrator-heartbeat',(string)time(),LOCK_EX); illustration_run_one(); }
 }finally{flock($lock,LOCK_UN);fclose($lock);}

@@ -86,6 +86,8 @@ with tempfile.TemporaryDirectory(prefix='hunta-http-') as tmp:
             assert 'class="post-title"' not in request('/admin.php?category=gena')[1],'admin other category'
             assert request('/illustration-status.php?id=1',opener=anonymous)[0]==401,'illustration history private'
             assert request('/illustration-status.php?id=1')[0]==200,'author can check illustration status'
+            assert request('/admin.php',{'action':'illustrator_download','kind':'key'})[0]==403,'SSH key download requires csrf'
+            assert 'HTTPS' in request('/admin.php',{'action':'illustrator_download','kind':'key','csrf':csrf})[1],'SSH private key cannot be downloaded over plain HTTP'
             settings_page=request('/admin.php?view=illustrator')[1]
             assert 'Модель читателя' in settings_page and 'name="api_key"' in settings_page,'illustrator settings UI'
             assert request('/admin.php?view=illustrator',{'action':'illustrator_settings','reader':'x/y','painter':'x/y'})[0]==403,'illustrator settings require csrf'

@@ -62,7 +62,9 @@ function illustration_enqueue(array $p,string $wishes): int {
         $q=$db->prepare('SELECT count(*) FROM illustration_jobs WHERE created_at>=?');$q->execute([date('Y-m-d').' 00:00:00']);
         if((int)$q->fetchColumn()>=$s['daily_limit'])throw new RuntimeException('Дневной лимит иллюстраций исчерпан. Его можно изменить в настройках.');
         $db->prepare('INSERT INTO illustration_jobs(post_id,revision,snapshot,created_at,updated_at) VALUES(?,?,?,?,?)')->execute([$p['id'],$p['revision'],json_encode($snapshot,JSON_UNESCAPED_UNICODE|JSON_THROW_ON_ERROR),now(),now()]);
-        $id=(int)$db->lastInsertId();$db->commit();audit('illustrator:queued',(int)$p['id']);return $id;
+        $id=(int)$db->lastInsertId();$db->commit();audit('illustrator:queued',(int)$p['id']);
+        if(illustration_backend()==='actions')illustration_dispatch();
+        return $id;
     }catch(Throwable $e){if($db->inTransaction())$db->rollBack();throw $e;}
 }
 function illustration_result(int $jobId,int $postId): array {

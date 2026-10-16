@@ -30,5 +30,5 @@ function orda_page_start(string $title): void {
 function orda_page_end(): void {
     global $ordaPageMode;
     echo $ordaPageMode==='auth'?'</div>':'</div></main></div>';
-    echo '<script src="/adminka/js/orda_confirm.js?v=1" defer></script><script src="/adminka/js/orda_save_shortcut.js?v=1" defer></script><script src="/adminka/js/orda_flash_message.js?v=1" defer></script><script src="/adminka/js/blog_shell.js?v=1" defer></script><script src="/assets/js/editor-help.js?v=2" defer></script></body></html>';
+    echo '<script src="/adminka/js/orda_confirm.js?v=1" defer></script><script src="/adminka/js/orda_save_shortcut.js?v=1" defer></script><script src="/adminka/js/orda_flash_message.js?v=1" defer></script><script src="/adminka/js/blog_shell.js?v=1" defer></script><script src="/assets/js/editor-help.js?v=3" defer></script></body></html>';
 }

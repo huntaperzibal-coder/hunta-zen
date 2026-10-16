@@ -50,3 +50,9 @@ CREATE TABLE IF NOT EXISTS illustration_jobs (
 );
 CREATE UNIQUE INDEX IF NOT EXISTS illustration_one_active ON illustration_jobs(post_id) WHERE state IN ('queued','planning','generating');
 INSERT OR IGNORE INTO schema_versions(version,applied_at) VALUES(4,datetime('now'));
+
+CREATE TABLE IF NOT EXISTS illustration_remote_leases (
+ job_id INTEGER PRIMARY KEY REFERENCES illustration_jobs(id) ON DELETE CASCADE,
+ token_hash TEXT NOT NULL, created_at TEXT NOT NULL
+);
+INSERT OR IGNORE INTO schema_versions(version,applied_at) VALUES(5,datetime('now'));

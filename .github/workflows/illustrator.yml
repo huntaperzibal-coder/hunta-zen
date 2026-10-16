@@ -1,0 +1,28 @@
+name: Story illustrator
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: hunta-zen-illustrator
+  cancel-in-progress: false
+jobs:
+  illustrate:
+    if: github.repository == 'huntaperzibal-coder/hunta-zen' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.3'
+          extensions: pdo_sqlite, mbstring, curl, fileinfo, dom
+          coverage: none
+      - name: Process private queue over restricted SSH
+        env:
+          HUNTA_SSH_TARGET: ${{ vars.HUNTA_SSH_TARGET }}
+          HUNTA_SSH_KEY: ${{ secrets.HUNTA_SSH_KEY }}
+          HUNTA_SSH_KNOWN_HOSTS: ${{ secrets.HUNTA_SSH_KNOWN_HOSTS }}
+        run: python3 tools/illustrator_actions.py
