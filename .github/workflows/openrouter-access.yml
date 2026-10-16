@@ -1,0 +1,31 @@
+name: OpenRouter connectivity (no API key)
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths: ['.github/workflows/openrouter-access.yml']
+permissions:
+  contents: read
+jobs:
+  public-api:
+    name: Public API reachable without credentials
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - name: Read public model catalog (no generation or secrets)
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import json, urllib.request, urllib.error
+          url = 'https://openrouter.ai/api/v1/models'
+          try:
+              with urllib.request.urlopen(url, timeout=30) as response:
+                  status = response.status
+                  data = json.loads(response.read(10 * 1024 * 1024))
+              assert status == 200 and isinstance(data.get('data'), list) and data['data'], 'Unexpected catalog response'
+              print('HTTP 200: public model catalog is accessible from this GitHub runner.')
+              print('No API key, author text, images, or paid inference were used.')
+          except urllib.error.HTTPError as error:
+              print('HTTP', error.code, error.read(1000).decode('utf-8', errors='replace'))
+              raise SystemExit(1)
+          PY

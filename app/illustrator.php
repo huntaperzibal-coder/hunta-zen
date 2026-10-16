@@ -86,6 +86,7 @@ function illustration_apply(array $p,int $jobId,string $kind): array {
 function illustration_error_detail(int $code,string $body,string $key): string {
     $data=json_decode($body,true);$parts=[];
     $error=is_array($data)?($data['error']??null):null;
+    if(is_string($error))$parts[]=$error;
     if(is_array($error)){
         if(is_string($error['message']??null))$parts[]=$error['message'];
         $metadata=is_array($error['metadata']??null)?$error['metadata']:[];
