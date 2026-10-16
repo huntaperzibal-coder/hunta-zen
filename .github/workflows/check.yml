@@ -1,0 +1,18 @@
+name: PHP checks
+on: [push, pull_request]
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        php: ['8.2', '8.3']
+    steps:
+      - uses: actions/checkout@v4
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: ${{ matrix.php }}
+          extensions: pdo_sqlite, mbstring, curl, fileinfo
+      - run: find app public tools tests -name '*.php' -exec php -l {} \;
+      - run: php tests/core.php
+      - run: python3 tests/integration_http.py
+      - run: node --check public/assets/js/editor.js

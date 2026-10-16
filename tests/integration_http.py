@@ -1,0 +1,64 @@
+"""Real HTTP checks; no external requests or real Telegram credentials."""
+import base64, http.cookiejar, json, os, pathlib, re, socket, subprocess, tempfile, time, urllib.error, urllib.parse, urllib.request
+ROOT=pathlib.Path(__file__).resolve().parents[1]
+PHP=os.environ.get('PHP_BIN','php')
+with tempfile.TemporaryDirectory(prefix='hunta-http-') as tmp:
+    storage=pathlib.Path(tmp);(storage/'photos').mkdir()
+    config={'storage':tmp,'site_url':'https://example.test','login':'author','password_hash':subprocess.check_output([PHP,'-r',"echo password_hash('test-password-only',PASSWORD_DEFAULT);"],text=True),'telegram_token':'','telegram_channel':''}
+    (storage/'config.php').write_text('<?php return json_decode('+repr(json.dumps(config))+',true);')
+    env={**os.environ,'HUNTA_CONFIG':str(storage/'config.php')}
+    subprocess.run([PHP,str(ROOT/'tools/migrate.php')],env=env,check=True,capture_output=True)
+    with socket.socket() as sock:
+        sock.bind(('127.0.0.1',0));port=sock.getsockname()[1]
+    base=f'http://127.0.0.1:{port}'
+    with tempfile.TemporaryFile() as log:
+        server=subprocess.Popen([PHP,'-S',f'127.0.0.1:{port}','-t',str(ROOT/'public')],env=env,stdout=log,stderr=log)
+        try:
+            jar=http.cookiejar.CookieJar();client=urllib.request.build_opener(urllib.request.HTTPCookieProcessor(jar))
+            def request(path, data=None, opener=client, headers=None):
+                if isinstance(data,dict):data=urllib.parse.urlencode(data).encode()
+                try:
+                    response=opener.open(urllib.request.Request(base+path,data=data,headers=headers or {}),timeout=5)
+                except urllib.error.HTTPError as error:response=error
+                return response.status,response.read().decode(errors='replace'),response.geturl()
+            for _ in range(100):
+                try:request('/');break
+                except urllib.error.URLError:time.sleep(.05)
+            else:raise AssertionError('server failed to start')
+            result=request('/admin.php',{'action':'new'}); assert result[0]==403,repr(result)
+            _,html,_=request('/admin.php');csrf=re.search(r'name="csrf" value="([^"]+)"',html)[1]
+            _,html,_=request('/admin.php',{'action':'login','csrf':csrf,'login':'author','password':'test-password-only'})
+            assert 'Мои истории' in html,'login'
+            _,html,url=request('/admin.php',{'action':'new','csrf':csrf});pid=urllib.parse.parse_qs(urllib.parse.urlparse(url).query)['id'][0]
+            revision=re.search(r'name="revision" value="(\d+)"',html)[1]
+            data={'action':'save','csrf':csrf,'id':pid,'revision':revision,'title':'История <script>x</script>','body':'Очень личный черновик','excerpt':'','telegram_text':''}
+            _,html,_=request('/admin.php',data)
+            revision=re.search(r'name="revision" value="(\d+)"',html)[1]
+            anonymous=urllib.request.build_opener()
+            assert 'Очень личный черновик' not in request('/',opener=anonymous)[1],'draft hidden'
+            assert request('/?p=istoriya-script-x-script',opener=anonymous)[0]==404
+            # Cover upload also saves the article; private photo must stay private.
+            boundary='hunta-test-boundary';fields={**data,'action':'upload','revision':revision,'photo_kind':'cover'}
+            parts=[]
+            for key,val in fields.items():parts.append(f'--{boundary}\r\nContent-Disposition: form-data; name="{key}"\r\n\r\n{val}\r\n'.encode())
+            png=base64.b64decode('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aX2kAAAAASUVORK5CYII=')
+            parts.append(f'--{boundary}\r\nContent-Disposition: form-data; name="photo"; filename="photo.png"\r\nContent-Type: image/png\r\n\r\n'.encode()+png+b'\r\n')
+            parts.append(f'--{boundary}--\r\n'.encode())
+            _,html,_=request('/admin.php',b''.join(parts),headers={'Content-Type':f'multipart/form-data; boundary={boundary}'})
+            photos=list((storage/'photos').iterdir());assert len(photos)==1,'upload'
+            photo=photos[0].name
+            assert request('/media.php?file='+photo,opener=anonymous)[0]==404,'draft cover hidden'
+            assert request('/media.php?file=../../config.php',opener=anonymous)[0]==404,'traversal blocked'
+            revision=re.search(r'name="revision" value="(\d+)"',html)[1]
+            data.update(action='publish',revision=revision)
+            _,html,_=request('/admin.php',data)
+            public=request('/',opener=anonymous)[1];assert 'Очень личный черновик' in public and '<script>x</script>' not in public,'published and escaped'
+            assert request('/media.php?file='+photo,opener=anonymous)[0]==200,'published cover visible'
+            stale={**data,'action':'autosave','body':'overwrite attempt'}
+            assert request('/admin.php',stale)[0]==409,'HTTP conflict'
+            assert 'overwrite attempt' not in request('/',opener=anonymous)[1]
+            subprocess.run([PHP,str(ROOT/'tools/backup.php')],env=env,check=True,capture_output=True)
+            copies=list((storage/'backups').iterdir());assert len(copies)==1 and (copies[0]/'photos'/photo).exists(),'backup photos'
+            print('OK: HTTP login, CSRF, drafts, upload, private media, publishing, XSS, conflicts, backup')
+        finally:
+            server.terminate();server.wait(timeout=5)

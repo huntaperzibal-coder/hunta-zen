@@ -1,0 +1,111 @@
+<?php
+declare(strict_types=1);
+require dirname(__DIR__).'/app/bootstrap.php';
+header('Cache-Control: no-store'); header('X-Robots-Tag: noindex, nofollow');
+session_open();
+$action=(string)($_POST['action']??''); $view=(string)($_GET['view']??'list'); $error=''; $unsaved=null; $savedRevision=null;
+if ($_SERVER['REQUEST_METHOD']==='POST') {
+    verify_csrf();
+    if ($action==='login') {
+        $address=hash('sha256',(string)($_SERVER['REMOTE_ADDR']??''));
+        $q=$db->prepare('SELECT * FROM login_attempts WHERE address=?');$q->execute([$address]);$attempt=$q->fetch();
+        if ($attempt && $attempt['blocked_until']>time()) $error='Слишком много попыток. Попробуй через 15 минут.';
+        elseif (hash_equals($config['login'],(string)($_POST['login']??'')) && password_verify((string)($_POST['password']??''),$config['password_hash'])) {
+            session_regenerate_id(true); $_SESSION['auth']=hash('sha256',$config['password_hash']);$_SESSION['expires']=time()+43200;
+            $db->prepare('DELETE FROM login_attempts WHERE address=?')->execute([$address]); audit('login');redirect('/admin.php');
+        } else {
+            $count=($attempt && (int)$attempt['blocked_until']>0 && (int)$attempt['blocked_until']<=time())?1:(int)($attempt['attempts']??0)+1;
+            $db->prepare('INSERT INTO login_attempts(address,attempts,blocked_until) VALUES(?,?,?) ON CONFLICT(address) DO UPDATE SET attempts=excluded.attempts,blocked_until=excluded.blocked_until')->execute([$address,$count,$count>=5?time()+900:0]);
+            $error='Логин или пароль не подошли.';
+        }
+        $view='login';
+    } else {
+        guard();
+        try {
+            if ($action==='logout') { $_SESSION=[]; session_destroy();redirect('/admin.php?view=login'); }
+            if ($action==='new') {
+                $stamp=now();$db->prepare('INSERT INTO posts(slug,created_at,updated_at) VALUES(?,?,?)')->execute(['draft-'.bin2hex(random_bytes(8)),$stamp,$stamp]);redirect('/admin.php?view=edit&id='.$db->lastInsertId());
+            }
+            if (in_array($action,['save','autosave','publish','unpublish','upload','telegram','resolve'],true)) {
+                $id=(int)($_POST['id']??0);
+                $input=$_POST;
+                if ($action==='publish') $input['status']='published';
+                if ($action==='unpublish') $input['status']='draft';
+                $p=save_post($id,$input,$action==='autosave'); $savedRevision=$p['revision'];
+                if ($action==='upload') {
+                    $name=photo_upload($_FILES['photo']??[]);
+                    if (($_POST['photo_kind']??'')==='inline') {
+                        $db->prepare('UPDATE posts SET body=body || ?,revision=revision+1 WHERE id=?')->execute(["\n\n![Подпись к фото](".$name.")\n",$id]);
+                    } else $db->prepare('UPDATE posts SET cover=?,revision=revision+1 WHERE id=?')->execute([$name,$id]);
+                }
+                if ($action==='telegram') telegram_send($id);
+                if ($action==='resolve') {
+                    if (empty($_POST['checked_channel'])) throw new RuntimeException('Сначала проверь результат в Telegram-канале.');
+                    $message=(int)($_POST['message_id']??0);
+                    $db->prepare("UPDATE telegram_deliveries SET state=?,message_id=?,error='',updated_at=? WHERE post_id=? AND channel=? AND state IN ('unknown','sending')")->execute([$message>0?'sent':'failed',$message>0?$message:null,now(),$id,$config['telegram_channel']]);
+                    audit('telegram:manual-check',$id);
+                }
+                if ($action==='autosave') { header('Content-Type: application/json'); echo json_encode(['revision'=>$p['revision'],'saved'=>date('H:i:s')]);exit; }
+                redirect('/admin.php?view=edit&id='.$id.'&saved=1');
+            }
+            if ($action==='settings') {
+                $title=trim((string)($_POST['title']??''));if ($title==='') throw new RuntimeException('У сайта должно быть название.');
+                $url=trim((string)($_POST['telegram_url']??''));
+                if ($url!=='' && !preg_match('~^https://t\.me/[A-Za-z0-9_]+$~',$url)) throw new RuntimeException('Ссылка канала должна начинаться с https://t.me/');
+                $db->beginTransaction();
+                $q=$db->prepare('INSERT INTO settings(key,value) VALUES(?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value');
+                foreach (['title'=>$title,'description'=>trim((string)($_POST['description']??'')),'telegram_url'=>$url,'indexed'=>isset($_POST['indexed'])?'1':'0'] as $k=>$v) $q->execute([$k,$v]);
+                $db->commit();audit('settings');redirect('/admin.php?view=settings&saved=1');
+            }
+        } catch (Throwable $e) {
+            if ($db->inTransaction()) $db->rollBack();
+            $error=$e instanceof RuntimeException?$e->getMessage():'Не удалось выполнить действие. Текст сохранён в форме; скопируй его перед обновлением страницы.';
+            if ($action==='autosave') { http_response_code(409); header('Content-Type: application/json');echo json_encode(['error'=>$error]);exit; }
+            if (isset($id)) { $view='edit'; $_GET['id']=$id; $unsaved=$_POST; $unsaved['revision']=$savedRevision ?? ($_POST['revision']??0); }
+        }
+    }
+}
+if (!authenticated()) $view='login'; else guard();
+page_start('Мастерская — '.setting('title'),true);
+if ($error) echo '<div class="notice error" role="alert">'.h($error).'</div>';
+if (isset($_GET['saved'])) echo '<div class="notice">Сохранено.</div>';
+if ($view==='login') {
+    echo '<section class="login"><p class="eyebrow">Личное пространство</p><h1>В мастерскую</h1><form method="post">'.csrf().'<input type="hidden" name="action" value="login"><label>Логин<input name="login" autocomplete="username" required></label><label>Пароль<input type="password" name="password" autocomplete="current-password" required></label><button>Войти</button></form></section>';
+} elseif ($view==='edit' || $view==='preview') {
+    try { $p=post((int)($_GET['id']??0)); } catch (Throwable $e) { http_response_code(404); echo '<h1>Запись не найдена</h1>';page_end();exit; }
+    if ($view==='preview') {
+        echo '<a href="/admin.php?view=edit&id='.$p['id'].'">← В редактор</a><p class="eyebrow">Предпросмотр · '.($p['status']==='draft'?'черновик':'опубликовано').'</p><h1>'.h($p['title']).'</h1>';
+        if ($p['cover']) echo '<img class="cover" src="'.h(photo_url($p['cover'])).'" alt="">';
+        echo '<div class="prose">'.render_body($p['body']).'</div>';
+    } else {
+        if ($unsaved) foreach (['title','body','excerpt','telegram_text','revision'] as $field) if (isset($unsaved[$field])) $p[$field]=$unsaved[$field];
+        $q=$db->prepare('SELECT * FROM telegram_deliveries WHERE post_id=? AND channel=?');$q->execute([$p['id'],$config['telegram_channel']]);$delivery=$q->fetch();
+        echo '<div class="toolbar"><a href="/admin.php">← Записи</a><span class="badge">'.($p['status']==='published'?'На сайте':'Черновик').'</span><a target="_blank" href="/admin.php?view=preview&id='.$p['id'].'">Предпросмотр ↗</a></div>';
+        echo '<form id="editor" data-unsaved="'.($unsaved?'1':'0').'" method="post" enctype="multipart/form-data">'.csrf().'<input type="hidden" name="id" value="'.$p['id'].'"><input type="hidden" name="revision" value="'.$p['revision'].'"><label class="sr-only" for="title">Заголовок</label><input id="title" class="title-input" name="title" maxlength="250" placeholder="Как назовём эту историю?" value="'.h($p['title']).'"><label class="sr-only" for="body">Текст</label><textarea id="body" class="writing" name="body" placeholder="Что у тебя на душе?">'.h($p['body']).'</textarea><div class="savebar"><button name="action" value="save">Сохранить</button><span id="save-status" role="status">'.($unsaved?'Есть несохранённые изменения':'Все изменения сохранены').'</span><button class="secondary" name="action" value="'.($p['status']==='published'?'unpublish':'publish').'">'.($p['status']==='published'?'Вернуть в черновики':'Опубликовать на сайте').'</button></div>';
+        echo '<details><summary>Фотографии</summary><p class="hint">JPEG, PNG, WebP до 12 МБ. Загрузка сохраняет и текст записи.</p>';
+        if ($p['cover']) echo '<img class="thumb" src="'.h(photo_url($p['cover'])).'" alt="Обложка">';
+        echo '<input type="file" name="photo" accept="image/jpeg,image/png,image/webp"><select name="photo_kind"><option value="cover">Обложка</option><option value="inline">Вставить в текст</option></select><button class="secondary" name="action" value="upload">Добавить фото</button><p class="hint">В тексте можно изменить подпись внутри ![Подпись](имя-файла). Жирный текст: **слова**.</p></details>';
+        echo '<details><summary>Анонс в ленте</summary><label>Короткое вступление<textarea name="excerpt" rows="3" placeholder="Если оставить пустым — возьмём начало истории">'.h($p['excerpt']).'</textarea></label></details>';
+        echo '<details id="telegram"><summary>Публикация в Telegram</summary><p class="hint">'.($delivery?'Состояние: '.h(['sent'=>'отправлено','sending'=>'отправка не завершена','unknown'=>'нужна проверка канала','failed'=>'не отправлено'][$delivery['state']]).'. ':'Ещё не отправляли. ').'Ссылка на статью добавляется автоматически. Фото появится в предпросмотре ссылки, если Telegram его сформирует.</p><label>Текст для канала<textarea name="telegram_text" rows="7" placeholder="По умолчанию: заголовок, начало истории и ссылка">'.h($p['telegram_text']).'</textarea></label><p class="hint">До 4096 символов вместе со ссылкой. Длинную историю можно вставить сюда целиком, если она помещается.</p><p><strong>Сейчас будет отправлено:</strong></p><pre class="tg-preview">'.h(telegram_text($p)).'</pre>';
+        if ($delivery && in_array($delivery['state'],['unknown','sending'],true)) {
+            echo '<label><input type="checkbox" name="checked_channel" value="1"> Я проверил канал</label><label>Номер отправленного сообщения (из ссылки на пост); 0, если сообщения нет<input type="number" name="message_id" min="0" value="0"></label><button class="secondary" name="action" value="resolve">Сохранить результат проверки</button>';
+        } else {
+            echo '<button name="action" value="telegram"'.($p['status']!=='published'?' disabled':'').'>'.(!empty($delivery['message_id'])?'Обновить сообщение в Telegram':'Отправить в Telegram').'</button>';
+        }
+        echo '</details></form><script src="/assets/js/editor.js?v=1" defer></script>';
+    }
+} elseif ($view==='settings') {
+    echo '<p class="eyebrow">Твой уголок</p><h1>Настройки</h1><form method="post">'.csrf().'<input type="hidden" name="action" value="settings"><label>Название сайта<input name="title" required value="'.h(setting('title')).'"></label><label>Описание<textarea name="description" rows="3">'.h(setting('description')).'</textarea></label><label>Ссылка на Telegram-канал<input name="telegram_url" placeholder="https://t.me/channel" value="'.h(setting('telegram_url')).'"></label><label><input type="checkbox" name="indexed" value="1"'.(setting('indexed')==='1'?' checked':'').'> Разрешить индексацию поисковиками</label><button>Сохранить</button></form><p class="hint">Токен бота и адрес канала для отправки хранятся в закрытом storage/config.php: telegram_token и telegram_channel. Боту нужны права публикации в канале. Не присылай токен в чат.</p>';
+} elseif ($view==='service') {
+    echo '<h1>Обслуживание</h1><p>База: SQLite · схема '.h($db->query('SELECT max(version) FROM schema_versions')->fetchColumn()).'</p><p>Telegram: '.(!empty($config['telegram_token']) && !empty($config['telegram_channel'])?'настроен':'ещё не подключён').'</p><p>Резервная копия базы и фотографий через SSH:</p><pre>php tools/backup.php</pre><p>Обновление кода с резервной копией:</p><pre>bash tools/update.sh</pre><h2>Последние действия</h2><ul class="audit">';
+    foreach ($db->query('SELECT * FROM audit ORDER BY id DESC LIMIT 30') as $row) echo '<li>'.h($row['created_at']).' · '.h($row['action']).($row['post_id']?' · запись '.(int)$row['post_id']:'').'</li>';
+    echo '</ul>';
+} else {
+    echo '<div class="section-head"><div><p class="eyebrow">Мастерская автора</p><h1>Мои истории</h1></div><form method="post">'.csrf().'<button name="action" value="new">＋ Написать</button></form></div>';
+    $filter=(string)($_GET['status']??'');if (!in_array($filter,['draft','published'],true))$filter='';
+    echo '<nav class="tabs"><a href="/admin.php">Все</a><a href="/admin.php?status=draft">Черновики и заметки</a><a href="/admin.php?status=published">На сайте</a></nav>';
+    $q=$db->prepare('SELECT * FROM posts'.($filter?' WHERE status=?':'').' ORDER BY updated_at DESC LIMIT 100');$q->execute($filter?[$filter]:[]);$posts=$q->fetchAll();
+    if (!$posts) echo '<div class="empty"><h2>Здесь начинается история</h2><p>Сохрани мысль в черновик. Возвращайся к ней, когда захочется.</p></div>';
+    foreach($posts as $p) echo '<a class="post-row" href="/admin.php?view=edit&id='.$p['id'].'"><div><h2>'.h($p['title'] ?: 'Пока без названия').'</h2><p>'.h(mb_substr($p['body'],0,120)).'</p></div><span class="badge">'.($p['status']==='draft'?'Черновик':'На сайте').'</span></a>';
+}
+page_end();
