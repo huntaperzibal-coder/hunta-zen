@@ -1,0 +1,19 @@
+/* One typography source for published stories, author preview and TinyMCE. */
+:root{--font-reading:system-ui,-apple-system,'Segoe UI',sans-serif;--reading-size:15px;--reading-leading:1.43;--space-paragraph:.95em}
+:is(.blog .prose,.orda-blog-content .prose,body.mce-content-body){font-family:var(--font-reading);font-size:var(--reading-size);line-height:var(--reading-leading);font-weight:400;letter-spacing:normal;overflow-wrap:anywhere}
+:is(.blog .prose,.orda-blog-content .prose,body.mce-content-body) p{font-family:inherit;font-size:inherit;line-height:inherit;margin:0 0 var(--space-paragraph)}
+:is(.blog .prose,.orda-blog-content .prose,body.mce-content-body) p:last-child{margin-bottom:0}
+:is(.blog .prose,.orda-blog-content .prose,body.mce-content-body) :is(h2,h3,h4){font-family:var(--font-reading);font-weight:600;line-height:1.3;letter-spacing:normal;margin:1em 0 .4em}
+:is(.blog .prose,.orda-blog-content .prose,body.mce-content-body) h2{font-size:20px}
+:is(.blog .prose,.orda-blog-content .prose,body.mce-content-body) h3{font-size:17px}
+:is(.blog .prose,.orda-blog-content .prose,body.mce-content-body) h4{font-size:16px}
+:is(.blog .prose,.orda-blog-content .prose,body.mce-content-body) :is(ul,ol){margin:.6em 0;padding-left:1.4em}
+:is(.blog .prose,.orda-blog-content .prose,body.mce-content-body) li{margin:0;line-height:inherit}
+:is(.blog .prose,.orda-blog-content .prose,body.mce-content-body) blockquote{border-left:3px solid var(--story-border,#8aa5b5);color:var(--muted,#666b6b);padding:2px 0 2px 12px;margin:.8em 0}
+:is(.blog .prose,.orda-blog-content .prose,body.mce-content-body) figure{margin:12px 0}
+:is(.blog .prose,.orda-blog-content .prose,body.mce-content-body) img{display:block;max-width:100%;width:auto;height:auto;max-height:340px;object-fit:contain}
+:is(.blog .prose,.orda-blog-content .prose,body.mce-content-body) figcaption{font:11px/1.4 var(--font-reading);color:var(--muted,#666b6b);margin:6px 0 0;padding:0}
+:is(.blog .prose,.orda-blog-content .prose,body.mce-content-body) table{border-collapse:collapse;max-width:100%;width:100%;font:inherit}
+:is(.blog .prose,.orda-blog-content .prose,body.mce-content-body) :is(td,th){border:1px solid var(--line,#dcded8);padding:5px 8px;vertical-align:top}
+:is(.blog .prose,.orda-blog-content .prose,body.mce-content-body) pre{white-space:pre-wrap;font:13px/1.43 ui-monospace,monospace;background:var(--soft,#efeee8);color:inherit;padding:10px;border-radius:4px}
+:is(.blog .prose,.orda-blog-content .prose,body.mce-content-body) hr{border:0;border-top:1px solid var(--line,#dcded8);margin:1em 0}

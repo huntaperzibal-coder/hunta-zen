@@ -57,7 +57,7 @@
       toolbar_mode: 'sliding', block_formats: 'Абзац=p; Подзаголовок=h2; Малый заголовок=h3',
       height: 760, min_height: window.innerWidth <= 700 ? 480 : 760, max_height: 6000,
       autoresize_bottom_margin: 24, autoresize_overflow_padding: 22, resize: true, elementpath: false,
-      content_css: '/assets/css/article-editor.css?v=4',
+      content_css: ['/assets/css/article-editor.css?v=5', '/assets/css/reading-type.css?v=1'],
       convert_urls: false, relative_urls: false, remove_script_host: true,
       paste_data_images: true, automatic_uploads: true,
       images_file_types: 'jpg,jpeg,png,webp', images_reuse_filename: false,
@@ -76,7 +76,16 @@
       },
       setup: ed => {
         let ready = false;
-        ed.on('init', () => { editor = ed; ready = true; });
+        const matchReadingScale = () => {
+          if (!ready || ed.removed) return;
+          const bodyScale = parseFloat(getComputedStyle(document.body).zoom) || 1;
+          const rootScale = parseFloat(getComputedStyle(document.documentElement).zoom) || 1;
+          ed.getBody().style.zoom = String(1 / (bodyScale * rootScale));
+          ed.execCommand('mceAutoResize');
+        };
+        ed.on('init', () => { editor = ed; ready = true; matchReadingScale(); });
+        window.addEventListener('resize', matchReadingScale);
+        ed.on('remove', () => window.removeEventListener('resize', matchReadingScale));
         ed.on('input change undo redo SetContent', () => { if (ready) { syncBody(); markDirty(); } });
         ed.addShortcut('meta+s', 'Сохранить запись', () => form.querySelector('[name="action"][value="save"]').click());
         ed.ui.registry.addButton('daosave', {icon: 'save', tooltip: 'Сохранить запись (Ctrl+S)', onAction: () => form.querySelector('[name="action"][value="save"]').click()});

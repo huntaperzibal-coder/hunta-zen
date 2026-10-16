@@ -23,3 +23,7 @@
 .dao-editor-tip{position:fixed;z-index:100000;max-width:min(340px,calc(100vw - 32px));box-sizing:border-box;padding:10px 14px;border-radius:8px;background:#30283e;color:#fff;font:13px/1.5 Arial,sans-serif;box-shadow:0 4px 18px #0003;pointer-events:none}.dao-editor-tip[hidden]{display:none}.dao-help-open .tox-tooltip{display:none!important}
 
 .dao-editor-tip{margin:0!important;transform:none!important;max-height:180px;overflow:hidden}
+
+.orda-blog-content .prose{max-width:626px}.orda-blog-content .form-db>input.title-input{font-family:system-ui,-apple-system,'Segoe UI',sans-serif;font-size:23px;font-weight:500;line-height:1.22;letter-spacing:-.3px}
+
+.orda-blog-content>.prose{zoom:calc(1 / var(--orda-ui-scale,1))}@media(max-width:700px){.orda-blog-content>.prose{zoom:1}}
