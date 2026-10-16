@@ -6,7 +6,7 @@
   let dirty = form.dataset.unsaved === '1', busy = false, stopped = false;
   let submitting = false, replay = false, pendingSubmit = null, editor = null;
   const activeUploads = new Set();
-  const fields = ['title', 'body', 'excerpt', 'telegram_text'];
+  const fields = ['title', 'body', 'excerpt', 'telegram_text', 'category_id'];
   const snapshot = () => fields.map(name => form.elements[name].value).join('\u0000');
   function markDirty() {
     dirty = true;
@@ -51,12 +51,13 @@
     tinymce.init({
       selector: '#body', base_url: '/assets/tinymce', suffix: '.min', license_key: 'gpl',
       language: 'ru', language_url: '/assets/tinymce/langs/ru.js',
-      plugins: 'lists advlist autolink link image fullscreen searchreplace wordcount code table charmap',
+      plugins: 'autoresize lists advlist autolink link image fullscreen searchreplace wordcount code table charmap',
       menubar: false, promotion: false, branding: false,
       toolbar: 'undo redo | blocks | bold italic underline strikethrough | bullist numlist blockquote | link daophoto image table | alignleft aligncenter alignright | removeformat | searchreplace fullscreen | daosave',
       toolbar_mode: 'sliding', block_formats: 'Абзац=p; Подзаголовок=h2; Малый заголовок=h3',
-      height: 560, min_height: 380, resize: true, elementpath: false,
-      content_css: '/assets/css/article-editor.css?v=3',
+      height: 760, min_height: window.innerWidth <= 700 ? 480 : 760, max_height: 6000,
+      autoresize_bottom_margin: 24, autoresize_overflow_padding: 22, resize: true, elementpath: false,
+      content_css: '/assets/css/article-editor.css?v=4',
       convert_urls: false, relative_urls: false, remove_script_host: true,
       paste_data_images: true, automatic_uploads: true,
       images_file_types: 'jpg,jpeg,png,webp', images_reuse_filename: false,
@@ -103,7 +104,7 @@
     }).catch(() => { status.textContent = 'Визуальный редактор не загрузился. Текст доступен в поле ниже; обнови страницу после сохранения.'; });
   }
   form.addEventListener('input', event => {
-    if (event.target.matches('[name=title],[name=body],[name=excerpt],[name=telegram_text]')) markDirty();
+    if (event.target.matches('[name=title],[name=body],[name=excerpt],[name=telegram_text],[name=category_id]')) markDirty();
   });
   async function submitPending() {
     if (busy || !pendingSubmit) return;

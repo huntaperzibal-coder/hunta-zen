@@ -29,3 +29,15 @@ CREATE TABLE IF NOT EXISTS orda_auth_attempts (
 );
 CREATE INDEX IF NOT EXISTS idx_orda_auth_attempts_key ON orda_auth_attempts(scope,key_hash,created_at);
 INSERT OR IGNORE INTO schema_versions VALUES(2,datetime('now'));
+
+CREATE TABLE IF NOT EXISTS categories (
+ id INTEGER PRIMARY KEY, slug TEXT NOT NULL UNIQUE, title TEXT NOT NULL, sort_order INTEGER NOT NULL DEFAULT 0
+);
+CREATE TABLE IF NOT EXISTS post_categories (
+ post_id INTEGER PRIMARY KEY REFERENCES posts(id) ON DELETE CASCADE,
+ category_id INTEGER NOT NULL REFERENCES categories(id)
+);
+CREATE INDEX IF NOT EXISTS posts_by_category ON post_categories(category_id,post_id);
+INSERT OR IGNORE INTO categories(slug,title,sort_order) VALUES('vinnie','Диалоги Винни',10);
+INSERT OR IGNORE INTO categories(slug,title,sort_order) VALUES('gena','Диалоги Гены',20);
+INSERT OR IGNORE INTO schema_versions VALUES(3,datetime('now'));

@@ -77,6 +77,13 @@ with tempfile.TemporaryDirectory(prefix='hunta-http-') as tmp:
             public=request('/?p=istoriya-script-x-script',opener=anonymous)[1]
             assert '<h2>Подзаголовок</h2>' in public and '<strong>Форматирование</strong>' in public,'formatted publication'
             assert 'onerror=' not in public and '<script>alert(1)' not in public,'server sanitizes HTML'
+            saved_revision=json.loads(result)['revision']
+            category_id=re.search(r'<option value="(\d+)"[^>]*>Диалоги Винни</option>',html)[1]
+            code,result,_=request('/admin.php',{**rich,'revision':saved_revision,'category_id':category_id});assert code==200,result
+            assert 'class="story"' in request('/?category=vinnie',opener=anonymous)[1],'published category filter'
+            assert 'class="story"' not in request('/?category=gena',opener=anonymous)[1],'other category excludes story'
+            assert 'class="post-title"' in request('/admin.php?category=vinnie')[1],'admin category filter'
+            assert 'class="post-title"' not in request('/admin.php?category=gena')[1],'admin other category'
             assert request('/editor-upload.php',b'')[0]==403,'upload requires csrf'
             assert request('/editor-upload.php',b'',opener=anonymous)[0]==401,'upload requires login'
             subprocess.run([PHP,str(ROOT/'tools/backup.php')],env=env,check=True,capture_output=True)

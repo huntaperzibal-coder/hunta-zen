@@ -13,3 +13,5 @@
 /* Mobile uses the document scroll; save controls follow the editor. */
 @media(max-width:700px){html:has(>body.orda-shell){height:auto;overflow-y:auto}body.orda-shell{height:auto;min-height:100dvh;overflow:visible}.orda-shell .layout{overflow:visible}}
 .orda-blog-content .savebar{position:relative;bottom:auto;z-index:auto}
+
+.post-category-field{display:flex;align-items:center;gap:12px;margin:0 0 12px}.orda-blog-content .post-category-field label{margin:0;color:var(--orda-text-muted)}.orda-blog-content .post-category-field select{width:260px;max-width:100%;margin:0}.category-tabs{display:flex;flex-wrap:wrap;gap:8px;margin:16px 0 22px}.category-tabs a,.category-chip{display:inline-block;border:1px solid var(--orda-border);border-radius:20px;padding:5px 12px;font-size:13px;background:var(--orda-bg-surface)}.category-tabs a.active{background:#ede5fb;border-color:#b9a5dc;color:#503580}.category-chip{font-size:11px;padding:3px 9px;color:#6750a4}@media(max-width:700px){.post-category-field{align-items:flex-start;flex-direction:column;gap:4px}.orda-blog-content .post-category-field select{width:100%}}

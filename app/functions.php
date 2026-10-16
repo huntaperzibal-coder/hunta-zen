@@ -31,7 +31,7 @@ function guard(): void { if (!authenticated()) { header('Location: /admin.php?vi
 function csrf(): string { session_open(); return '<input type="hidden" name="csrf" value="'.h($_SESSION['csrf']).'">'; }
 function verify_csrf(): void { session_open(); if (!hash_equals($_SESSION['csrf'],(string)($_POST['csrf']??''))) { http_response_code(403); exit('Сессия формы устарела. Обнови страницу.'); } }
 function redirect(string $url): never { header('Location: '.$url,true,303); exit; }
-function post(int $id): array { global $db; $q=$db->prepare('SELECT * FROM posts WHERE id=?'); $q->execute([$id]); $p=$q->fetch(); if (!$p) throw new RuntimeException('Запись не найдена.'); return $p; }
+function post(int $id): array { global $db; $q=$db->prepare('SELECT p.*, COALESCE(pc.category_id,0) AS category_id,c.title AS category_title,c.slug AS category_slug FROM posts p LEFT JOIN post_categories pc ON pc.post_id=p.id LEFT JOIN categories c ON c.id=pc.category_id WHERE p.id=?'); $q->execute([$id]); $p=$q->fetch(); if (!$p) throw new RuntimeException('Запись не найдена.'); return $p; }
 function slugify(string $text): string {
     $from=preg_split('//u','абвгдеёжзийклмнопрстуфхцчшщъыьэюя',-1,PREG_SPLIT_NO_EMPTY);
     $to=['a','b','v','g','d','e','yo','zh','z','i','y','k','l','m','n','o','p','r','s','t','u','f','kh','ts','ch','sh','shch','','y','','e','yu','ya'];
@@ -59,10 +59,26 @@ function save_post(int $id, array $input, bool $autosave=false): array {
     // Публичный адрес закрепляется при первой публикации.
     $slug=$old['published_at'] ? $old['slug'] : unique_slug($title ?: 'Черновик',$id);
     $published=$old['published_at'] ?: ($status==='published' ? now() : null);
-    $q=$db->prepare('UPDATE posts SET title=?,body=?,excerpt=?,telegram_text=?,status=?,slug=?,published_at=?,updated_at=?,revision=revision+1 WHERE id=? AND revision=?');
-    $q->execute([$title,$body,trim((string)($input['excerpt']??'')),trim((string)($input['telegram_text']??'')),$status,$slug,$published,now(),$id,$old['revision']]);
-    if ($q->rowCount()!==1) throw new RuntimeException('Конфликт сохранения. Текст остался в редакторе.');
-    if (!$autosave) audit('save:'.$status,$id);
+    $categoryId=null;
+    if (array_key_exists('category_id',$input)) {
+        $raw=(string)$input['category_id'];
+        if (!preg_match('/^[0-9]+$/D',$raw)) throw new RuntimeException('Неизвестная категория.');
+        $categoryId=(int)$raw;
+        if ($categoryId>0) { $q=$db->prepare('SELECT 1 FROM categories WHERE id=?');$q->execute([$categoryId]);if(!$q->fetchColumn())throw new RuntimeException('Категория не найдена.'); }
+    }
+    $db->beginTransaction();
+    try {
+        $q=$db->prepare('UPDATE posts SET title=?,body=?,excerpt=?,telegram_text=?,status=?,slug=?,published_at=?,updated_at=?,revision=revision+1 WHERE id=? AND revision=?');
+        $q->execute([$title,$body,trim((string)($input['excerpt']??'')),trim((string)($input['telegram_text']??'')),$status,$slug,$published,now(),$id,$old['revision']]);
+        if ($q->rowCount()!==1) throw new RuntimeException('Конфликт сохранения. Текст остался в редакторе.');
+        if ($categoryId!==null) {
+            if ($categoryId===0) $db->prepare('DELETE FROM post_categories WHERE post_id=?')->execute([$id]);
+            else $db->prepare('INSERT INTO post_categories(post_id,category_id) VALUES(?,?) ON CONFLICT(post_id) DO UPDATE SET category_id=excluded.category_id')->execute([$id,$categoryId]);
+        }
+        if (!$autosave) audit('save:'.$status,$id);
+        $db->commit();
+    } catch (Throwable $e) { if ($db->inTransaction())$db->rollBack();throw $e; }
+
     return post($id);
 }
 function photo_upload(array $file): string {
@@ -95,7 +111,7 @@ function page_start(string $title, bool $admin=false, string $description='', st
     if (!$indexed) header('X-Robots-Tag: noindex, nofollow');
     if ($admin) { orda_page_start($title);return; }
     global $config;
-    $canonical=rtrim($config['site_url'],'/').'/'.(isset($_GET['p'])?'?p='.rawurlencode((string)$_GET['p']):'');
+    $canonical=rtrim($config['site_url'],'/').'/'.(isset($_GET['p'])?'?p='.rawurlencode((string)$_GET['p']):(!empty($_GET['category'])?'?category='.rawurlencode((string)$_GET['category']):''));
     $og='<meta property="og:type" content="article"><meta property="og:title" content="'.h($title).'"><meta property="og:description" content="'.h($description ?: setting('description')).'"><meta property="og:url" content="'.h($canonical).'"><link rel="canonical" href="'.h($canonical).'">';
     if ($cover) $og.='<meta property="og:image" content="'.h(rtrim($config['site_url'],'/').photo_url($cover)).'">';
     echo '<!doctype html><html lang="ru"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>'.h($title).'</title><meta name="description" content="'.h($description ?: setting('description')).'">'.($admin?'':$og).dao_brand_head(false).'<link rel="stylesheet" href="/assets/css/app.css?v=3"><body class="'.($admin?'workshop':'blog').'"><header><a class="brand" href="/"><img class="site-avatar" src="/assets/brand/dialogue.svg?v=2" width="42" height="42" alt="">'.h(setting('title')).'</a><nav>';

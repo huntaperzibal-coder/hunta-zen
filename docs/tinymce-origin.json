@@ -90,6 +90,10 @@
     {
       "path": "public/assets/tinymce/plugins/charmap/plugin.min.js",
       "sha": "6a0b0c2724495c884396c0668a00d49e69dbb7aa"
+    },
+    {
+      "path": "public/assets/tinymce/plugins/autoresize/plugin.min.js",
+      "source": "assets/tinymce/plugins/autoresize/plugin.min.js"
     }
   ]
 }
