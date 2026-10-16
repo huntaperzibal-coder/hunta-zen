@@ -63,6 +63,19 @@ try{
     $refJob=illustration_enqueue($p,'Сохранить внешность');$calls=[];illustration_run_one($mock);
     verify_illustration(!isset($calls[1][1]['input_references'])&&!isset(json_decode($calls[0][1]['messages'][1]['content'],true)['character_bible'])&&!str_contains($calls[1][1]['prompt'],'Союзмультфильм'),'concept illustration omits old character references and character bible');
     verify_illustration(illustration_result($refJob,(int)$p['id'])['state']==='done','reference generation completed');
+    foreach(['vinnie'=>'vinnie-warm-v1','gena'=>'gena-cool-v1'] as $slug=>$styleId){
+        $category=category_by_slug($slug);
+        $p=save_post((int)$p['id'],['title'=>$p['title'],'body'=>$p['body'],'revision'=>$p['revision'],'category_id'=>$category['id']]);
+        $styledJob=illustration_enqueue($p,'Свободная композиция');
+        $snapshot=json_decode((string)$db->query('SELECT snapshot FROM illustration_jobs WHERE id='.$styledJob)->fetchColumn(),true);
+        $p=save_post((int)$p['id'],['title'=>$p['title'],'body'=>$p['body'],'revision'=>$p['revision'],'category_id'=>0]);
+        $calls=[];illustration_run_one($mock);
+        $styled=illustration_result($styledJob,(int)$p['id']);$plan=json_decode($styled['plan'],true);
+        $readerInput=json_decode($calls[0][1]['messages'][1]['content'],true);
+        verify_illustration($snapshot['style_profile']['id']===$styleId&&$plan['style_profile']['id']===$styleId&&$readerInput['art_direction']===$snapshot['settings']['style']&&str_contains($calls[1][1]['prompt'],$snapshot['settings']['style']),'category palette reaches reader and painter and survives later category change: '.$slug);
+    }
+    verify_illustration(illustration_style_profile('')===null,'uncategorized posts retain general style');
+
 }finally{
     $db=null;
     $files=new RecursiveIteratorIterator(new RecursiveDirectoryIterator($dir,FilesystemIterator::SKIP_DOTS),RecursiveIteratorIterator::CHILD_FIRST);
