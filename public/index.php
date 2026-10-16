@@ -33,8 +33,9 @@ echo '</aside><section class="reading-feed" aria-label="Лента истори�
 if($current)echo '<a class="back" href="/'.($category?'?category='.h(rawurlencode($category['slug'])):'').'">← К ленте целиком</a>';
 if(!$stories)echo '<p class="empty">'.($category?'В этой линии пока нет опубликованных историй.':'Скоро здесь появятся первые истории.').'</p>';
 foreach($stories as $p){
-    echo '<article class="story" id="post-'.(int)$p['id'].'"><div class="story-meta"><time datetime="'.h(date('Y-m-d',strtotime($p['published_at']))).'">'.h(date('d.m.Y',strtotime($p['published_at']))).'</time>';
-    if(!empty($p['category_title']))echo '<a href="/?category='.h(rawurlencode($p['category_slug'])).'">'.h(category_public_title($p['category_slug'],$p['category_title'])).'</a>';
+    $line=in_array($p['category_slug']??'', ['gena','vinnie'],true)?$p['category_slug']:'general';
+    echo '<article class="story" data-line="'.h($line).'" id="post-'.(int)$p['id'].'"><div class="story-meta"><time datetime="'.h(date('Y-m-d',strtotime($p['published_at']))).'">'.h(date('d.m.Y',strtotime($p['published_at']))).'</time>';
+    if(!empty($p['category_title']))echo '<a href="/?category='.h(rawurlencode($p['category_slug'])).'">'.h(category_public_title($p['category_slug'],$p['category_title'])).' <span class="story-line-caption">· '.h(category_public_caption($p['category_slug'],$p['category_title'])).'</span></a>';
     echo '</div>'.($current?'<h1>':'<h2><a href="/?p='.h(rawurlencode($p['slug'])).'">').h($p['title']).($current?'</h1>':'</a></h2>');
     if($p['cover'])echo '<a class="story-image-link" href="'.h(photo_url($p['cover'])).'" target="_blank" rel="noopener" aria-label="Открыть иллюстрацию полностью"><img loading="lazy" class="cover" src="'.h(photo_url($p['cover'])).'" alt="Иллюстрация к истории «'.h($p['title']).'»"></a>';
     echo '<div class="prose">'.render_body($p['body']).'</div></article>';

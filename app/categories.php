@@ -7,6 +7,9 @@ function category_by_slug(string $slug): ?array {
 function category_public_title(string $slug,string $fallback): string {
     return match($slug){'gena'=>'Так устроено','vinnie'=>'Так суждено',default=>$fallback};
 }
+function category_public_caption(string $slug,string $fallback): string {
+    return match($slug){'gena'=>'Дао Гены','vinnie'=>'Дао Винни',default=>$fallback};
+}
 function category_options(int $current): string {
     $html='<option value="0">Без категории</option>';
     foreach(post_categories() as $c)$html.='<option value="'.(int)$c['id'].'"'.((int)$c['id']===$current?' selected':'').'>'.h($c['title']).'</option>';
@@ -16,6 +19,6 @@ function category_links(string $base,array $query=[]): string {
     $selected=(string)($query['category']??'');unset($query['category']);
     $url=$base.($query?'?'.http_build_query($query):'');
     $html='<nav class="category-tabs" aria-label="Категории"><a href="'.h($url).'"'.($selected===''?' class="active" aria-current="page"':'').'>Все категории</a>';
-    foreach(post_categories() as $c){$href=$base.'?'.http_build_query($query+['category'=>$c['slug']]);$html.='<a href="'.h($href).'"'.($selected===$c['slug']?' class="active" aria-current="page"':'').'>'.($base==='/'?h(category_public_title($c['slug'],$c['title'])).(in_array($c['slug'],['gena','vinnie'],true)?'<small class="category-caption">'.h($c['title']).'</small>':''):h($c['title'])).'</a>';}
+    foreach(post_categories() as $c){$href=$base.'?'.http_build_query($query+['category'=>$c['slug']]);$html.='<a href="'.h($href).'"'.($selected===$c['slug']?' class="active" aria-current="page"':'').'>'.($base==='/'?h(category_public_title($c['slug'],$c['title'])).(in_array($c['slug'],['gena','vinnie'],true)?'<small class="category-caption">'.h(category_public_caption($c['slug'],$c['title'])).'</small>':''):h($c['title'])).'</a>';}
     return $html.'</nav>';
 }
