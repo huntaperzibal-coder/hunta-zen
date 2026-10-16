@@ -61,7 +61,7 @@ try{
     $s=illustration_settings();$s['references']=[$job['image']];
     $db->prepare("UPDATE settings SET value=? WHERE key='illustrator'")->execute([json_encode($s)]);
     $refJob=illustration_enqueue($p,'Сохранить внешность');$calls=[];illustration_run_one($mock);
-    verify_illustration(str_starts_with($calls[1][1]['input_references'][0]['image_url']['url'],'data:image/png;base64,'),'reference passed as embedded local raster');
+    verify_illustration(!isset($calls[1][1]['input_references'])&&!isset(json_decode($calls[0][1]['messages'][1]['content'],true)['character_bible'])&&!str_contains($calls[1][1]['prompt'],'Союзмультфильм'),'concept illustration omits old character references and character bible');
     verify_illustration(illustration_result($refJob,(int)$p['id'])['state']==='done','reference generation completed');
 }finally{
     $db=null;
