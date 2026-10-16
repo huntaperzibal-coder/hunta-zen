@@ -22,7 +22,7 @@ try {
     $db->exec("UPDATE telegram_deliveries SET state='sent'");
     fails(fn()=>telegram_send($id,fn()=>['ok'=>false,'error_code'=>403]),'API rejection');
     check($db->query('SELECT state FROM telegram_deliveries')->fetchColumn()==='failed','known failure recorded');
-    $input['revision']=$p['revision'];$input['telegram_text']=str_repeat('я',4097);$p=save_post($id,$input);fails(fn()=>telegram_send($id,$mock),'message length checked before send');
+    $input['revision']=$p['revision'];$input['telegram_text']=str_repeat('я',4097);$p=save_post($id,$input);$calls=[];telegram_send($id,$mock);check(count($calls)===2,'long story split without truncation');
     $input['revision']=$p['revision'];$input['telegram_text']='';$input['status']='draft';$p=save_post($id,$input);fails(fn()=>telegram_send($id,$mock),'draft cannot go to channel');
     $db->exec(file_get_contents(ROOT.'/database.sql'));check(post($id)['body']===$input['body'],'migration preserves content');
     $db->exec('VACUUM INTO '.$db->quote($dir.'/copy.sqlite'));$copy=new PDO('sqlite:'.$dir.'/copy.sqlite');check($copy->query('PRAGMA integrity_check')->fetchColumn()==='ok','consistent SQLite snapshot');

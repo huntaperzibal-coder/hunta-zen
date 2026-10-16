@@ -56,3 +56,18 @@ CREATE TABLE IF NOT EXISTS illustration_remote_leases (
  token_hash TEXT NOT NULL, created_at TEXT NOT NULL
 );
 INSERT OR IGNORE INTO schema_versions(version,applied_at) VALUES(5,datetime('now'));
+
+CREATE TABLE IF NOT EXISTS telegram_parts (
+ post_id INTEGER NOT NULL REFERENCES posts(id), channel TEXT NOT NULL, kind TEXT NOT NULL CHECK(kind IN ('photo','text')),
+ ordinal INTEGER NOT NULL, message_id INTEGER, state TEXT NOT NULL DEFAULT 'failed',
+ operation TEXT NOT NULL DEFAULT 'upsert', content_hash TEXT NOT NULL DEFAULT '',
+ PRIMARY KEY(post_id,channel,kind,ordinal)
+);
+CREATE TABLE IF NOT EXISTS telegram_schedule (
+ id INTEGER PRIMARY KEY, post_id INTEGER NOT NULL REFERENCES posts(id), channel TEXT NOT NULL,
+ bot_fingerprint TEXT NOT NULL, snapshot TEXT NOT NULL, due_at INTEGER NOT NULL,
+ state TEXT NOT NULL DEFAULT 'scheduled' CHECK(state IN ('scheduled','running','sent','failed','cancelled')),
+ error TEXT NOT NULL DEFAULT '', created_at TEXT NOT NULL, updated_at TEXT NOT NULL
+);
+CREATE UNIQUE INDEX IF NOT EXISTS telegram_one_scheduled ON telegram_schedule(post_id,channel) WHERE state IN ('scheduled','running');
+INSERT OR IGNORE INTO schema_versions VALUES(6,datetime('now'));

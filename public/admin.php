@@ -22,6 +22,7 @@ if ($_SERVER['REQUEST_METHOD']==='POST') {
         guard();
         try {
             if ($action==='logout') { $_SESSION=[]; session_destroy();redirect('/admin.php?view=login'); }
+            if ($action==='telegram_connection') { telegram_save_connection($_POST);redirect('/admin.php?view=telegram&saved=1'); }
             if ($action==='new') {
                 $stamp=now();$db->prepare('INSERT INTO posts(slug,created_at,updated_at) VALUES(?,?,?)')->execute(['draft-'.bin2hex(random_bytes(8)),$stamp,$stamp]);redirect('/admin.php?view=edit&id='.$db->lastInsertId());
             }
@@ -49,7 +50,7 @@ if ($_SERVER['REQUEST_METHOD']==='POST') {
                 illustration_result((int)$applyId,(int)($_POST['id']??0));
                 $action='illustration_apply';
             }
-            if (in_array($action,['illustration_dispatch','illustrate','illustration_apply','save','autosave','publish','unpublish','upload','telegram','resolve'],true)) {
+            if (in_array($action,['illustration_dispatch','illustrate','illustration_apply','save','autosave','publish','unpublish','upload','telegram','telegram_schedule','telegram_cancel','resolve'],true)) {
                 $id=(int)($_POST['id']??0);
                 $input=$_POST;
                 if ($action==='publish') $input['status']='published';
@@ -65,15 +66,15 @@ if ($_SERVER['REQUEST_METHOD']==='POST') {
                         $db->prepare('UPDATE posts SET body=body || ?,revision=revision+1 WHERE id=?')->execute([$addition,$id]);
                     } else $db->prepare('UPDATE posts SET cover=?,revision=revision+1 WHERE id=?')->execute([$name,$id]);
                 }
-                if ($action==='telegram') telegram_send($id);
+                if ($action==='telegram') { telegram_cancel_schedule($id);telegram_send($id); }
+                if ($action==='telegram_schedule') telegram_schedule_post($id,(string)($_POST['telegram_due']??''));
+                if ($action==='telegram_cancel') telegram_cancel_schedule($id);
                 if ($action==='resolve') {
                     if (empty($_POST['checked_channel'])) throw new RuntimeException('Сначала проверь результат в Telegram-канале.');
-                    $message=(int)($_POST['message_id']??0);
-                    $db->prepare("UPDATE telegram_deliveries SET state=?,message_id=?,error='',updated_at=? WHERE post_id=? AND channel=? AND state IN ('unknown','sending')")->execute([$message>0?'sent':'failed',$message>0?$message:null,now(),$id,$config['telegram_channel']]);
-                    audit('telegram:manual-check',$id);
+                    telegram_resolve($id,max(0,(int)($_POST['message_id']??0)));
                 }
                 if ($action==='autosave') { header('Content-Type: application/json'); echo json_encode(['revision'=>$p['revision'],'saved'=>date('H:i:s')]);exit; }
-                redirect('/admin.php?view=edit&id='.$id.'&saved=1'.(in_array($action,['illustration_dispatch','illustrate','illustration_apply'],true)?'#illustrations':''));
+                redirect('/admin.php?view=edit&id='.$id.'&saved=1'.(in_array($action,['illustration_dispatch','illustrate','illustration_apply'],true)?'#illustrations':(in_array($action,['telegram','telegram_schedule','telegram_cancel','resolve'],true)?'#telegram':'' )));
             }
             if ($action==='settings') {
                 $title=trim((string)($_POST['title']??''));if ($title==='') throw new RuntimeException('У сайта должно быть название.');
@@ -115,27 +116,17 @@ if ($view==='login') {
         if ($p['cover']) echo '<img class="thumb" src="'.h(photo_url($p['cover'])).'" alt="Обложка">';
         echo '<input type="file" name="photo" accept="image/jpeg,image/png,image/webp"><select class="user-input" name="photo_kind"><option value="cover">Обложка</option><option value="inline">Вставить в текст</option></select><button class="btn-secondary" name="action" value="upload">Добавить фото</button><p class="hint">Фотографии в текст удобнее добавлять кнопкой «Фото» на панели редактора или перетаскиванием файла. Здесь можно загрузить обложку.</p></details>';
         echo '<details><summary>Анонс в ленте</summary><label>Короткое вступление<textarea class="user-input" name="excerpt" rows="3" placeholder="Если оставить пустым — возьмём начало истории">'.h($p['excerpt']).'</textarea></label></details>';
-        echo '<details id="telegram"><summary>Публикация в Telegram</summary><p class="hint">'.($delivery?'Состояние: '.h(['sent'=>'отправлено','sending'=>'отправка не завершена','unknown'=>'нужна проверка канала','failed'=>'не отправлено'][$delivery['state']]).'. ':'Ещё не отправляли. ').'Ссылка на статью добавляется автоматически. Фото появится в предпросмотре ссылки, если Telegram его сформирует.</p><label>Текст для канала<textarea class="user-input" name="telegram_text" rows="7" placeholder="По умолчанию: заголовок, начало истории и ссылка">'.h($p['telegram_text']).'</textarea></label><p class="hint">До 4096 символов вместе со ссылкой. Длинную историю можно вставить сюда целиком, если она помещается.</p><p><strong>Сейчас будет отправлено:</strong></p><pre class="tg-preview">'.h(telegram_text($p)).'</pre>';
-        if ($delivery && in_array($delivery['state'],['unknown','sending'],true)) {
-            echo '<label><input type="checkbox" name="checked_channel" value="1"> Я проверил канал</label><label>Номер отправленного сообщения (из ссылки на пост); 0, если сообщения нет<input class="user-input" type="number" name="message_id" min="0" value="0"></label><button class="btn-secondary" name="action" value="resolve">Сохранить результат проверки</button>';
-        } else {
-            echo '<button type="submit" class="btn-main" name="action" value="telegram"'.($p['status']!=='published'?' disabled':'').'>'.(!empty($delivery['message_id'])?'Обновить сообщение в Telegram':'Отправить в Telegram').'</button>';
-        }
-        echo '</details></form>';
+        telegram_editor($p,$delivery?:null);
+        echo '</form>';
         illustration_editor($p);
         echo '<script src="/assets/tinymce/tinymce.min.js?v=8.5.0" defer></script><script src="/assets/js/editor.js?v=6" defer></script>';
     }
 } elseif ($view==='illustrator') {
     illustration_settings_page();
 } elseif ($view==='settings') {
-    echo '<p class="eyebrow">Твой уголок</p><h1>Настройки</h1><form method="post">'.csrf().'<input type="hidden" name="action" value="settings"><label>Название сайта<input type="text" class="user-input" name="title" required value="'.h(setting('title')).'"></label><label>Описание<textarea class="user-input" name="description" rows="3">'.h(setting('description')).'</textarea></label><label>Ссылка на Telegram-канал<input type="text" class="user-input" name="telegram_url" placeholder="https://t.me/channel" value="'.h(setting('telegram_url')).'"></label><label><input type="checkbox" name="indexed" value="1"'.(setting('indexed')==='1'?' checked':'').'> Разрешить индексацию поисковиками</label><button type="submit" class="btn-main">Сохранить</button></form><p class="hint">Токен бота и адрес канала для отправки хранятся в закрытом storage/config.php: telegram_token и telegram_channel. Боту нужны права публикации в канале. Не присылай токен в чат.</p>';
+    echo '<p class="eyebrow">Твой уголок</p><h1>Настройки</h1><form method="post">'.csrf().'<input type="hidden" name="action" value="settings"><label>Название сайта<input type="text" class="user-input" name="title" required value="'.h(setting('title')).'"></label><label>Описание<textarea class="user-input" name="description" rows="3">'.h(setting('description')).'</textarea></label><label>Ссылка на Telegram-канал<input type="text" class="user-input" name="telegram_url" placeholder="https://t.me/channel" value="'.h(setting('telegram_url')).'"></label><label><input type="checkbox" name="indexed" value="1"'.(setting('indexed')==='1'?' checked':'').'> Разрешить индексацию поисковиками</label><button type="submit" class="btn-main">Сохранить</button></form><p class="hint">Бот и канал для отправки подключаются в разделе <a href="/admin.php?view=telegram">Telegram</a>. Ссылка выше — только ссылка для читателей сайта.</p>';
 } elseif ($view==='telegram') {
-    echo '<h1>Telegram</h1><p class="hint">Подготовь текст в редакторе записи. После отправки здесь будет её состояние в канале.</p><div class="table-scroll"><table class="index-table"><thead><tr><th>Запись</th><th>В канале</th><th></th></tr></thead><tbody>';
-    $q=$db->prepare("SELECT p.*,d.state FROM posts p LEFT JOIN telegram_deliveries d ON d.post_id=p.id AND d.channel=? WHERE p.status='published' ORDER BY p.published_at DESC LIMIT 100");$q->execute([$config['telegram_channel']]);
-    $rows=$q->fetchAll();
-    if (!$rows) echo '<tr><td colspan="3">Сначала опубликуй первую историю на сайте.</td></tr>';
-    foreach($rows as $row) echo '<tr><td>'.h($row['title']).'</td><td>'.h(['sent'=>'Отправлено','sending'=>'Проверь канал','unknown'=>'Проверь канал','failed'=>'Не отправлено'][$row['state']]??'Ещё не отправлено').'</td><td><a class="btn-edit" href="/admin.php?view=edit&amp;id='.$row['id'].'#telegram">Подготовить публикацию</a></td></tr>';
-    echo '</tbody></table></div>';
+    telegram_page();
 } elseif ($view==='service') {
     echo '<h1>Обслуживание</h1><p>База: SQLite · схема '.h($db->query('SELECT max(version) FROM schema_versions')->fetchColumn()).'</p><p>Telegram: '.(!empty($config['telegram_token']) && !empty($config['telegram_channel'])?'настроен':'ещё не подключён').'</p><p>Резервная копия базы и фотографий через SSH:</p><pre>php tools/backup.php</pre><p>Обновление кода с резервной копией:</p><pre>~/zen-sync.sh</pre><h2>Последние действия</h2><ul class="audit">';
     foreach ($db->query('SELECT * FROM audit ORDER BY id DESC LIMIT 30') as $row) echo '<li>'.h($row['created_at']).' · '.h($row['action']).($row['post_id']?' · запись '.(int)$row['post_id']:'').'</li>';

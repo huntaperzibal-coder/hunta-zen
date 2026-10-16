@@ -27,3 +27,5 @@
 .orda-blog-content .prose{max-width:626px}.orda-blog-content .form-db>input.title-input{font-family:system-ui,-apple-system,'Segoe UI',sans-serif;font-size:23px;font-weight:500;line-height:1.22;letter-spacing:-.3px}
 
 .orda-blog-content>.prose{zoom:calc(1 / var(--orda-ui-scale,1))}@media(max-width:700px){.orda-blog-content>.prose{zoom:1}}
+
+.orda-blog-content input[type="datetime-local"]{box-sizing:border-box;max-width:100%;min-height:36px;padding:8px 10px;border:1px solid var(--orda-border);border-radius:6px;background:#fff;color:var(--orda-text-main);font:14px var(--orda-font-main)}
