@@ -1,12 +1,10 @@
 (() => {
   const lightbox = document.getElementById('reader-lightbox');
-  const shareDialog = document.getElementById('reader-share');
-  if (!lightbox || !shareDialog) return;
+  if (!lightbox) return;
   const image = lightbox.querySelector('img');
   const caption = lightbox.querySelector('.lightbox-caption');
   const previous = lightbox.querySelector('.lightbox-prev');
   const next = lightbox.querySelector('.lightbox-next');
-  const shareInput = shareDialog.querySelector('input');
   let images = [], position = 0, opener = null;
   const draw = () => {
     const source = images[position];
@@ -45,23 +43,17 @@
     if (navigator.clipboard?.writeText) {
       try { await navigator.clipboard.writeText(url); return true; } catch (_) {}
     }
-    return false;
+    const field = document.createElement('textarea');
+    field.value = url; field.className = 'clipboard-buffer';
+    field.setAttribute('readonly', '');
+    const focused = document.activeElement;
+    document.body.append(field); field.select();
+    let copied = false;
+    try { copied = document.execCommand('copy'); } catch (_) {}
+    field.remove(); focused?.focus({preventScroll: true});
+    return copied;
   };
-  const showLink = box => {
-    shareDialog.querySelector('.share-post-title').textContent = box.dataset.postTitle;
-    shareDialog.querySelector('.share-dialog-status').textContent = '';
-    shareInput.value = box.dataset.postUrl;
-    shareDialog.showModal(); shareInput.focus(); shareInput.select();
-  };
-  shareDialog.querySelector('[data-close-share]').addEventListener('click', () => shareDialog.close());
-  shareDialog.querySelector('[data-copy-dialog]').addEventListener('click', async () => {
-    let copied = await copy(shareInput.value);
-    if (!copied) {
-      shareInput.focus(); shareInput.select();
-      try { copied = document.execCommand('copy'); } catch (_) {}
-    }
-    shareDialog.querySelector('.share-dialog-status').textContent = copied ? 'Ссылка скопирована' : 'Ссылка выделена. Нажми Ctrl+C или выбери «Копировать».';
-  });
+  const feedbackTimers = new WeakMap();
   document.querySelectorAll('[data-share]').forEach(button => { button.hidden = false; });
   document.addEventListener('click', async event => {
     const action = event.target.closest('[data-share]');
@@ -69,10 +61,18 @@
       if (event.ctrlKey || event.metaKey || event.shiftKey || event.altKey) return;
       event.preventDefault();
       const box = action.closest('.story-actions');
-      if (navigator.share) {
-        try { await navigator.share({title: box.dataset.postTitle, url: box.dataset.postUrl}); }
-        catch (error) { if (error.name !== 'AbortError') showLink(box); }
-      } else showLink(box);
+      const copied = await copy(box.dataset.postUrl);
+      clearTimeout(feedbackTimers.get(action));
+      action.classList.toggle('is-copied', copied);
+      action.title = copied ? 'Ссылка скопирована' : 'Не удалось скопировать ссылку';
+      action.setAttribute('aria-label', action.title);
+      document.getElementById('reader-action-status').textContent = action.title;
+      feedbackTimers.set(action, setTimeout(() => {
+        action.classList.remove('is-copied');
+        action.title = 'Скопировать ссылку';
+        action.setAttribute('aria-label', 'Скопировать ссылку на запись «' + box.dataset.postTitle + '»');
+        document.getElementById('reader-action-status').textContent = '';
+      }, 2000));
       return;
     }
     const source = event.target.closest('.story img');
