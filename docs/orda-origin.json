@@ -75,14 +75,10 @@
       "adapted": false
     },
     {
-      "source": "adminka/texts/orda_icons.json",
-      "target": "app/orda_icons.json",
-      "adapted": true
-    },
-    {
       "source": "adminka/orda.php + adminka/tools/render_orda_menu.php + adminka/login.php",
       "target": "app/orda_layout.php + public/admin.php",
       "adapted": true
     }
-  ]
+  ],
+  "branding": "Дао: собственные логотипы и SVG-иконки в app/dao_brand.php и public/assets/brand; прежние иконки ТОПО удалены."
 }

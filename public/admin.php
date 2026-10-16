@@ -65,11 +65,11 @@ if ($_SERVER['REQUEST_METHOD']==='POST') {
     }
 }
 if (!authenticated()) $view='login'; else guard();
-page_start('Мастерская — '.setting('title'),true);
+page_start('Дао — '.setting('title'),true);
 if ($error) echo '<div class="auth-error" role="alert">'.h($error).'</div>';
 if (isset($_GET['saved'])) echo '<div class="auth-success">Сохранено.</div>';
 if ($view==='login') {
-    echo '<div class="auth-title">'.orda_icon('f2x4hafy').'<span>Тамга</span><small>'.h(setting('title')).'</small></div><form method="post">'.csrf().'<input type="hidden" name="action" value="login"><label class="sr-only" for="login">Логин</label><input type="text" id="login" class="auth-input" name="login" placeholder="Логин" autocomplete="username" required><div class="password-wrap"><label class="sr-only" for="password">Пароль</label><input id="password" class="auth-input" type="password" name="password" placeholder="Пароль" autocomplete="current-password" required><button type="button" class="pass-toggle" aria-label="Показать пароль" aria-pressed="false">👁</button></div><button type="submit" class="auth-btn">Войти</button></form>';
+    echo '<div class="auth-title">'.dao_icon('logo').'<span>Дао</span><small>'.h(setting('title')).'</small></div><form method="post">'.csrf().'<input type="hidden" name="action" value="login"><label class="sr-only" for="login">Логин</label><input type="text" id="login" class="auth-input" name="login" placeholder="Логин" autocomplete="username" required><div class="password-wrap"><label class="sr-only" for="password">Пароль</label><input id="password" class="auth-input" type="password" name="password" placeholder="Пароль" autocomplete="current-password" required><button type="button" class="pass-toggle" aria-label="Показать пароль" aria-pressed="false">'.dao_icon('eye').'</button></div><button type="submit" class="auth-btn">Войти</button></form>';
 
 } elseif ($view==='edit' || $view==='preview') {
     try { $p=post((int)($_GET['id']??0)); } catch (Throwable $e) { http_response_code(404); echo '<h1>Запись не найдена</h1>';page_end();exit; }

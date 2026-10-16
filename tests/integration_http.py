@@ -29,10 +29,16 @@ with tempfile.TemporaryDirectory(prefix='hunta-http-') as tmp:
             _,html,_=request('/admin.php');csrf=re.search(r'name="csrf" value="([^"]+)"',html)[1]
             _,html,_=request('/admin.php',{'action':'login','csrf':csrf,'login':'author','password':'test-password-only'})
             assert 'Мои истории' in html,'login'
+            assert 'Дао' in html and 'Тамга' not in html,'Dao identity'
+            assert '/assets/brand/dao-admin.svg?v=2' in html,'admin emblem and favicon'
             assert 'class="side"' in html and 'class="layout"' in html,'Orda shell'
             assert '/styles_core/adminka/stili_orda.css' in html and '/assets/css/app.css' not in html,'original Orda stylesheet'
             assert request('/styles_core/adminka/stili_orda.css')[0]==200,'CSS served'
             assert request('/assets/fonts/Manrope-Regular.woff2')[0]==200,'local font served'
+            for path in ['/assets/brand/dialogue.svg','/assets/brand/dao-admin.svg','/assets/brand/dialogue-32.png','/assets/brand/dao-admin.ico','/site.webmanifest','/admin.webmanifest','/favicon.ico']:
+                assert request(path)[0]==200,'brand asset '+path
+            public_head=request('/')[1]
+            assert '/assets/brand/dialogue.svg?v=2' in public_head and '/assets/brand/dao-admin.svg' not in public_head,'separate site identity'
             for path,heading in [('/admin.php?view=settings','Настройки'),('/admin.php?view=telegram','Telegram'),('/admin.php?view=service','Обслуживание')]:
                 code,panel,_=request(path);assert code==200 and heading in panel,'navigation '+path
             _,html,url=request('/admin.php',{'action':'new','csrf':csrf});pid=urllib.parse.parse_qs(urllib.parse.urlparse(url).query)['id'][0]
