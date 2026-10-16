@@ -1,7 +1,7 @@
 <?php
 declare(strict_types=1);
 if (PHP_SAPI!=='cli') { http_response_code(404); exit; }
-foreach (['pdo_sqlite','mbstring','curl','fileinfo'] as $extension) {
+foreach (['pdo_sqlite','mbstring','curl','fileinfo','dom'] as $extension) {
     if (!extension_loaded($extension)) exit('Нужно расширение PHP: '.$extension."\n");
 }
 $root=dirname(__DIR__); $storage=$root.'/storage';

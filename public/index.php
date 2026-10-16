@@ -17,7 +17,7 @@ if ($slug!=='') {
     foreach (array_slice($posts,0,10) as $p) {
         echo '<article class="story"><p class="eyebrow">'.h(date('d.m.Y',strtotime($p['published_at']))).'</p><h2><a href="/?p='.h(rawurlencode($p['slug'])).'">'.h($p['title']).'</a></h2>';
         if ($p['cover']) echo '<a href="/?p='.h(rawurlencode($p['slug'])).'"><img loading="lazy" class="cover" src="'.h(photo_url($p['cover'])).'" alt=""></a>';
-        echo '<p>'.nl2br(h($p['excerpt'] ?: mb_substr(preg_replace('/!\[[^\]]*\]\([^)]+\)/','',$p['body']),0,350))).'</p><a class="read" href="/?p='.h(rawurlencode($p['slug'])).'">Читать историю →</a></article>';
+        echo '<p>'.nl2br(h($p['excerpt'] ?: mb_substr(body_plain($p['body']),0,350))).'</p><a class="read" href="/?p='.h(rawurlencode($p['slug'])).'">Читать историю →</a></article>';
     }
     echo '<nav class="pagination">'; if ($page>1) echo '<a href="/?page='.($page-1).'">← Новее</a>'; if (count($posts)>10) echo '<a href="/?page='.($page+1).'">Раньше →</a>'; echo '</nav>';
 }

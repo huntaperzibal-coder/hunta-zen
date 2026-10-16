@@ -1,0 +1,95 @@
+{
+  "name": "TinyMCE",
+  "version": "8.5.0",
+  "sourceRepository": "huntaperzibal-coder/altai-topo",
+  "resources": [
+    {
+      "path": "public/assets/tinymce/tinymce.min.js",
+      "sha": "463827b6b4b4ad0300ffc65542a5b5f1025e1281"
+    },
+    {
+      "path": "public/assets/tinymce/license.md",
+      "sha": "70454a6387194ce998007d30822c96e5206d1994"
+    },
+    {
+      "path": "public/assets/tinymce/notices.txt",
+      "sha": "63e7fe656e7f5d1070b1828f0de83e202ca7e558"
+    },
+    {
+      "path": "public/assets/tinymce/langs/ru.js",
+      "sha": "e41cb217d08259cc697dde543fd9ef43048feca1"
+    },
+    {
+      "path": "public/assets/tinymce/models/dom/model.min.js",
+      "sha": "aab17404a17509d59ec411826e362edcf71af8ee"
+    },
+    {
+      "path": "public/assets/tinymce/themes/silver/theme.min.js",
+      "sha": "3621168f4c06b137ad9d118bd472ce9e220dbb1c"
+    },
+    {
+      "path": "public/assets/tinymce/icons/default/icons.min.js",
+      "sha": "4880e655a0b93f8a361d6fddb6fa34fca0ac55f3"
+    },
+    {
+      "path": "public/assets/tinymce/skins/ui/oxide/skin.min.css",
+      "sha": "bc730e3bb2f1eb2ce05aa0a8d93e3870bbf63f21"
+    },
+    {
+      "path": "public/assets/tinymce/skins/ui/oxide/content.min.css",
+      "sha": "327031f6b46770cac05cd51ec07e922b0c2c40ff"
+    },
+    {
+      "path": "public/assets/tinymce/skins/ui/oxide/skin.shadowdom.min.css",
+      "sha": "8745951a48471023edc29ffba19af40e7bd5f128"
+    },
+    {
+      "path": "public/assets/tinymce/skins/content/default/content.min.css",
+      "sha": "44e18ac4531509517c979352c8aece164606c2ae"
+    },
+    {
+      "path": "public/assets/tinymce/plugins/lists/plugin.min.js",
+      "sha": "02293c0f235e99f67abeaf001d82cb15750d76f3"
+    },
+    {
+      "path": "public/assets/tinymce/plugins/advlist/plugin.min.js",
+      "sha": "ce5b5143fd47d5eb318f0ef04efadbf97e3e3664"
+    },
+    {
+      "path": "public/assets/tinymce/plugins/autolink/plugin.min.js",
+      "sha": "2bf7f28059b9e8e3cfb9aa4ba05ed8a923c54d31"
+    },
+    {
+      "path": "public/assets/tinymce/plugins/link/plugin.min.js",
+      "sha": "04e158e1c9e1fbf50d770866cb4d50f2c9811694"
+    },
+    {
+      "path": "public/assets/tinymce/plugins/image/plugin.min.js",
+      "sha": "c1035c60d0565a77f6c5f4a070c4b7f470770f0e"
+    },
+    {
+      "path": "public/assets/tinymce/plugins/fullscreen/plugin.min.js",
+      "sha": "803649cfbfccf18a2a5af8ea946a15091d1da0a8"
+    },
+    {
+      "path": "public/assets/tinymce/plugins/searchreplace/plugin.min.js",
+      "sha": "0d8036dc7a06206cb497b08220065f5fa844cb5e"
+    },
+    {
+      "path": "public/assets/tinymce/plugins/wordcount/plugin.min.js",
+      "sha": "96acd6d772b0ae5a34aa1cef627a5be135924b16"
+    },
+    {
+      "path": "public/assets/tinymce/plugins/code/plugin.min.js",
+      "sha": "0830e78b03b2c977d5d9bae135f76749e175de62"
+    },
+    {
+      "path": "public/assets/tinymce/plugins/table/plugin.min.js",
+      "sha": "096188d93997ff622da07b685c6d832320ea3bc0"
+    },
+    {
+      "path": "public/assets/tinymce/plugins/charmap/plugin.min.js",
+      "sha": "6a0b0c2724495c884396c0668a00d49e69dbb7aa"
+    }
+  ]
+}

@@ -46,6 +46,10 @@ function save_post(int $id, array $input, bool $autosave=false): array {
     if ((int)($input['revision']??0)!==(int)$old['revision']) throw new RuntimeException('Запись уже изменена в другой вкладке. Скопируй свой текст и обнови страницу.');
     $title=trim((string)($input['title']??'')); $body=trim((string)($input['body']??''));
     if (mb_strlen($title)>250 || strlen($body)>1000000) throw new RuntimeException('Слишком большой текст или заголовок.');
+    if (($input['body_format']??'')==='html') {
+        $html=sanitize_article_html($body);
+        $body=trim(html_entity_decode(strip_tags($html),ENT_QUOTES|ENT_HTML5,'UTF-8'))!=='' || str_contains($html,'<img ')?DAO_RICH_PREFIX.$html:'';
+    }
     $status=$old['status'];
     if (!$autosave && isset($input['status'])) {
         if (!in_array($input['status'],['draft','published'],true)) throw new RuntimeException('Неизвестное состояние.');
@@ -74,6 +78,9 @@ function photo_upload(array $file): string {
 }
 function photo_url(string $name, ?int $id=null): string { return '/media.php?file='.rawurlencode($name).($id?'&post='.$id:''); }
 function render_body(string $body): string {
+    return rich_body($body)?sanitize_article_html(substr($body,strlen(DAO_RICH_PREFIX))):render_legacy_body($body);
+}
+function render_legacy_body(string $body): string {
     // Текст никогда не исполняется как HTML. Фотографии — только наши локальные имена.
     $safe=h($body);
     $safe=preg_replace_callback('/!\[([^\]\n]*)\]\(([a-f0-9]{32}\.(?:jpg|png|webp))\)/',fn($m)=>'</p><figure><img loading="lazy" src="'.h(photo_url($m[2])).'" alt="'.$m[1].'"><figcaption>'.$m[1].'</figcaption></figure><p>',$safe);
@@ -83,14 +90,15 @@ function render_body(string $body): string {
 function page_start(string $title, bool $admin=false, string $description='', string $cover=''): void {
     $indexed=!$admin && setting('indexed')==='1';
     header('X-Content-Type-Options: nosniff'); header('Referrer-Policy: same-origin');
-    header("Content-Security-Policy: default-src 'self'; img-src 'self' data:; style-src 'self'; script-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'");
+    $stylePolicy=$admin?"'self' 'unsafe-inline'":"'self'";
+    header("Content-Security-Policy: default-src 'self'; img-src 'self' data: blob:; style-src $stylePolicy; script-src 'self'; frame-src 'self' blob:; frame-ancestors 'none'; base-uri 'none'; form-action 'self'");
     if (!$indexed) header('X-Robots-Tag: noindex, nofollow');
     if ($admin) { orda_page_start($title);return; }
     global $config;
     $canonical=rtrim($config['site_url'],'/').'/'.(isset($_GET['p'])?'?p='.rawurlencode((string)$_GET['p']):'');
     $og='<meta property="og:type" content="article"><meta property="og:title" content="'.h($title).'"><meta property="og:description" content="'.h($description ?: setting('description')).'"><meta property="og:url" content="'.h($canonical).'"><link rel="canonical" href="'.h($canonical).'">';
     if ($cover) $og.='<meta property="og:image" content="'.h(rtrim($config['site_url'],'/').photo_url($cover)).'">';
-    echo '<!doctype html><html lang="ru"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>'.h($title).'</title><meta name="description" content="'.h($description ?: setting('description')).'">'.($admin?'':$og).dao_brand_head(false).'<link rel="stylesheet" href="/assets/css/app.css?v=2"><body class="'.($admin?'workshop':'blog').'"><header><a class="brand" href="/"><img class="site-avatar" src="/assets/brand/dialogue.svg?v=2" width="42" height="42" alt="">'.h(setting('title')).'</a><nav>';
+    echo '<!doctype html><html lang="ru"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>'.h($title).'</title><meta name="description" content="'.h($description ?: setting('description')).'">'.($admin?'':$og).dao_brand_head(false).'<link rel="stylesheet" href="/assets/css/app.css?v=3"><body class="'.($admin?'workshop':'blog').'"><header><a class="brand" href="/"><img class="site-avatar" src="/assets/brand/dialogue.svg?v=2" width="42" height="42" alt="">'.h(setting('title')).'</a><nav>';
     if ($admin && authenticated()) echo '<a href="/admin.php">Записи</a><a href="/admin.php?view=settings">Настройки</a><a href="/admin.php?view=service">Обслуживание</a><form method="post">'.csrf().'<button class="quiet" name="action" value="logout">Выйти</button></form>';
     else { $tg=setting('telegram_url'); if (preg_match('~^https://t\.me/[A-Za-z0-9_]+$~',$tg)) echo '<a href="'.h($tg).'">Telegram ↗</a>'; }
     echo '</nav></header><main>';

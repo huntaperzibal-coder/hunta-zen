@@ -2,7 +2,7 @@
 declare(strict_types=1);
 function telegram_text(array $p): string {
     global $config;
-    $text=$p['telegram_text'] ?: $p['title']."\n\n".($p['excerpt'] ?: mb_substr(preg_replace('/!\[[^\]]*\]\([^)]+\)/','',$p['body']),0,700));
+    $text=$p['telegram_text'] ?: $p['title']."\n\n".($p['excerpt'] ?: mb_substr(body_plain($p['body']),0,700));
     return trim($text)."\n\n".rtrim($config['site_url'],'/').'/?p='.rawurlencode($p['slug']);
 }
 function telegram_send(int $id, ?callable $transport=null): void {

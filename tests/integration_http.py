@@ -69,6 +69,16 @@ with tempfile.TemporaryDirectory(prefix='hunta-http-') as tmp:
             stale={**data,'action':'autosave','body':'overwrite attempt'}
             assert request('/admin.php',stale)[0]==409,'HTTP conflict'
             assert 'overwrite attempt' not in request('/',opener=anonymous)[1]
+            _,html,_=request('/admin.php?view=edit&id='+pid)
+            assert '/assets/tinymce/tinymce.min.js' in html and 'name="body_format" value="html"' in html,'visual editor loaded'
+            revision=re.search(r'name="revision" value="(\d+)"',html)[1]
+            rich={**data,'action':'autosave','revision':revision,'body_format':'html','body':'<h2>Подзаголовок</h2><p><strong>Форматирование</strong></p><script>alert(1)</script><p><img src="/media.php?file='+photo+'" onerror="alert(1)"></p>'}
+            code,result,_=request('/admin.php',rich);assert code==200,result
+            public=request('/?p=istoriya-script-x-script',opener=anonymous)[1]
+            assert '<h2>Подзаголовок</h2>' in public and '<strong>Форматирование</strong>' in public,'formatted publication'
+            assert 'onerror=' not in public and '<script>alert(1)' not in public,'server sanitizes HTML'
+            assert request('/editor-upload.php',b'')[0]==403,'upload requires csrf'
+            assert request('/editor-upload.php',b'',opener=anonymous)[0]==401,'upload requires login'
             subprocess.run([PHP,str(ROOT/'tools/backup.php')],env=env,check=True,capture_output=True)
             copies=list((storage/'backups').iterdir());assert len(copies)==1 and (copies[0]/'photos'/photo).exists(),'backup photos'
             print('OK: HTTP login, CSRF, drafts, upload, private media, publishing, XSS, conflicts, backup')
