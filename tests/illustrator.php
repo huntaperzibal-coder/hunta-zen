@@ -16,6 +16,12 @@ try{
         $detail=illustration_error_detail(400,json_encode(['error'=>['message'=>'Blocked','metadata'=>['raw'=>$encoded?json_encode($raw):$raw]]]),'secret');
         verify_illustration(str_contains($detail,'OTHER')&&str_contains($detail,'IMAGE_SAFETY')&&str_contains($detail,'HARM_CATEGORY_DANGEROUS_CONTENT')&&!str_contains($detail,'PRIVATE_'),'Google block details shown without response content or headers');
     }
+    $probeCalls=[];
+    $probe=illustration_actions_execute(['neutral_test'=>true,'api_key'=>'local-test-secret'],function($path,$payload,$key)use(&$probeCalls){
+        $probeCalls[]=[$path,$payload];
+        throw new RuntimeException('neutral-test-rejection');
+    });
+    verify_illustration(count($probeCalls)===1&&$probeCalls[0][0]==='images'&&array_keys($probeCalls[0][1])===['model','n','prompt']&&$probeCalls[0][1]['model']==='google/gemini-3.1-flash-image'&&!str_contains($probeCalls[0][1]['prompt'],'Винни')&&$probe['error']==='neutral-test-rejection','neutral Actions probe sends only one fixed image request without story or references');
     $db->exec(file_get_contents(ROOT.'/database.sql'));$db->exec(file_get_contents(ROOT.'/database.sql'));
     $db->prepare('INSERT INTO posts(title,body,slug,created_at,updated_at) VALUES(?,?,?,?,?)')->execute(['У костра',"Гена и Винни сидят у костра.\nПоследняя строка — звёзды.",'fire',now(),now()]);$p=post((int)$db->lastInsertId());
     expect_illustration_error(fn()=>illustration_enqueue($p,''));

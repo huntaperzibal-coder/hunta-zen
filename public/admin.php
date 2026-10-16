@@ -35,6 +35,13 @@ if ($_SERVER['REQUEST_METHOD']==='POST') {
                 header('Content-Disposition: attachment; filename="'.($kind==='key'?'hunta-illustrator-key.txt':'hunta-illustrator-known-hosts.txt').'"');
                 readfile($file);exit;
             }
+            if ($action==='illustrator_probe') {
+                if(illustration_key()==='')throw new RuntimeException('Сначала сохрани ключ OpenRouter.');
+                if(in_array(setting('illustrator_probe_state'),['queued','running'],true))throw new RuntimeException('Проверка уже запущена. Обнови страницу позже.');
+                $db->prepare('INSERT OR REPLACE INTO settings(key,value) VALUES(?,?)')->execute(['illustrator_probe_state','queued']);
+                try{illustration_dispatch(true);}catch(Throwable $e){$db->prepare('INSERT OR REPLACE INTO settings(key,value) VALUES(?,?)')->execute(['illustrator_probe_state','failed']);throw $e;}
+                redirect('/admin.php?view=illustrator#probe');
+            }
             if ($action==='illustrator_settings') { illustration_save_settings($_POST,$_FILES);illustration_save_github_token((string)($_POST['github_token']??''));redirect('/admin.php?view=illustrator&saved=1'); }
             if (str_starts_with($action,'illustration_cover:') || str_starts_with($action,'illustration_inline:')) {
                 [$applyKind,$applyId]=explode(':',$action,2);

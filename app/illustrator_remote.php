@@ -15,6 +15,24 @@ function illustration_bridge(array $request): array {
         illustration_remote_expire();
         file_put_contents($storage.'/illustrator-heartbeat',(string)time(),LOCK_EX);
         $op=(string)($request['op']??'');
+        if($op==='probe_claim'){
+            if(setting('illustrator_probe_state')!=='queued')return ['ok'=>true,'probe'=>null];
+            $key=illustration_key();if($key==='')throw new RuntimeException('Не задан ключ OpenRouter.');
+            $lease=bin2hex(random_bytes(32));
+            $db->prepare('INSERT OR REPLACE INTO settings(key,value) VALUES(?,?)')->execute(['illustrator_probe_lease',hash('sha256',$lease)]);
+            $db->prepare('INSERT OR REPLACE INTO settings(key,value) VALUES(?,?)')->execute(['illustrator_probe_state','running']);
+            return ['ok'=>true,'probe'=>['neutral_test'=>true,'api_key'=>$key,'lease'=>$lease]];
+        }
+        if($op==='probe_finish'){
+            if(!hash_equals(setting('illustrator_probe_lease','missing'),hash('sha256',(string)($request['lease']??''))))throw new RuntimeException('Нет разрешения.');
+            $result=$request['result']??[];
+            $state=($result['state']??'')==='done'?'done':'failed';
+            $error=mb_substr(str_replace(illustration_key(),'[ключ скрыт]',(string)($result['error']??'')),0,1600);
+            $value=json_encode(['state'=>$state,'cost'=>max(0,(float)($result['cost']??0)),'error'=>$error,'time'=>now()],JSON_UNESCAPED_UNICODE|JSON_THROW_ON_ERROR);
+            $db->prepare('INSERT OR REPLACE INTO settings(key,value) VALUES(?,?)')->execute(['illustrator_probe_result',$value]);
+            $db->prepare('INSERT OR REPLACE INTO settings(key,value) VALUES(?,?)')->execute(['illustrator_probe_state',$state]);
+            return ['ok'=>true];
+        }
         if($op==='claim'){
             $key=illustration_key();if($key==='')throw new RuntimeException('Не задан ключ OpenRouter.');
             $job=$db->query("SELECT * FROM illustration_jobs WHERE state='queued' ORDER BY id LIMIT 1")->fetch();
@@ -72,19 +90,20 @@ function illustration_save_github_token(string $token): void {
     $file=tempnam($storage,'github-');if(!$file)throw new RuntimeException('Не удалось сохранить токен.');chmod($file,0600);
     if(file_put_contents($file,'<?php return '.var_export($token,true).';',LOCK_EX)===false||!rename($file,$storage.'/illustrator-github.php')){@unlink($file);throw new RuntimeException('Не удалось сохранить токен.');}
 }
-function illustration_dispatch(): bool {
+function illustration_dispatch(bool $neutralTest=false): bool {
     global $db;
     if(illustration_backend()!=='actions')return false;
-    if(!$db->query("SELECT 1 FROM illustration_jobs WHERE state='queued' LIMIT 1")->fetchColumn())return true;
+    if(!$neutralTest && !$db->query("SELECT 1 FROM illustration_jobs WHERE state='queued' LIMIT 1")->fetchColumn())return true;
     $token=illustration_github_token();
     $error='';
     if($token==='')$error='Добавь токен запуска GitHub в настройках. Очередь также можно запустить кнопкой Run workflow в GitHub.';
     else{
         $c=curl_init('https://api.github.com/repos/'.ILLUSTRATOR_REPOSITORY.'/actions/workflows/illustrator.yml/dispatches');
-        curl_setopt_array($c,[CURLOPT_POST=>true,CURLOPT_POSTFIELDS=>json_encode(['ref'=>'main']),CURLOPT_RETURNTRANSFER=>true,CURLOPT_CONNECTTIMEOUT=>10,CURLOPT_TIMEOUT=>20,CURLOPT_FOLLOWLOCATION=>false,CURLOPT_PROTOCOLS=>CURLPROTO_HTTPS,
+        curl_setopt_array($c,[CURLOPT_POST=>true,CURLOPT_POSTFIELDS=>json_encode($neutralTest?['ref'=>'main','inputs'=>['neutral_test'=>true]]:['ref'=>'main']),CURLOPT_RETURNTRANSFER=>true,CURLOPT_CONNECTTIMEOUT=>10,CURLOPT_TIMEOUT=>20,CURLOPT_FOLLOWLOCATION=>false,CURLOPT_PROTOCOLS=>CURLPROTO_HTTPS,
             CURLOPT_HTTPHEADER=>['Authorization: Bearer '.$token,'Accept: application/vnd.github+json','Content-Type: application/json','X-GitHub-Api-Version: 2022-11-28','User-Agent: hunta-zen-illustrator']]);
         $result=curl_exec($c);$code=(int)curl_getinfo($c,CURLINFO_RESPONSE_CODE);curl_close($c);
         if($result===false||$code<200||$code>=300)$error='Не удалось подтвердить запуск Actions (HTTP '.$code.'). Проверь токен: нужен доступ Actions — Read and write к hunta-zen. Повторный запуск очереди не создаёт новый вариант.';
     }
-    $db->prepare("UPDATE illustration_jobs SET error=? WHERE state='queued'")->execute([$error]);return $error==='';
+    if($neutralTest && $error!=='')throw new RuntimeException($error);
+    if(!$neutralTest)$db->prepare("UPDATE illustration_jobs SET error=? WHERE state='queued'")->execute([$error]);return $error==='';
 }

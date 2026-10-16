@@ -36,6 +36,13 @@ function illustration_settings_page(): void {
     echo '<label>Общий стиль<textarea class="user-input" name="style" rows="4" maxlength="8000" required>'.h($s['style']).'</textarea></label><label>Кто такие Гена, Винни и другие герои<textarea class="user-input" name="characters" rows="6" maxlength="8000" placeholder="Для каждого: кто он, внешность, одежда, характер. Необязательно заполнять сразу.">'.h($s['characters']).'</textarea></label><p class="hint">Имена сами по себе не определяют внешность. Здесь можно описать собственных героев и прикрепить их образец или общий лист персонажей.</p><div class="illustration-references">';
     foreach($s['references'] as $name)echo '<img class="thumb" src="'.h(photo_url($name)).'" alt="Референс персонажей">';
     echo '</div><label>Добавить референс (до трёх, каждый до 4 МБ)<input type="file" name="reference" accept="image/png,image/jpeg,image/webp"></label><label><input type="checkbox" name="clear_references" value="1"> Убрать прежние референсы из будущих генераций</label><label>Максимум вариантов за день<input class="user-input" type="number" name="daily_limit" min="1" max="50" value="'.(int)$s['daily_limit'].'"></label><button class="btn-main">Сохранить настройки</button></form>';
+    if(illustration_backend()==='actions'){
+        echo '<section id="probe"><h2>Проверка художника</h2><p>Один платный запрос к Nano Banana 2 через Actions: «Заснеженная равнина на рассвете. Мягкая акварель. Без людей, животных и надписей». Без читателя, настроек стиля, героев и референсов. Очередь рассказов не обрабатывается.</p><form method="post">'.csrf().'<button class="btn-secondary" name="action" value="illustrator_probe">Проверить простым запросом · платно</button></form>';
+        echo '<p>Состояние: '.h(['queued'=>'ожидает Actions','running'=>'запрос выполняется','done'=>'получено изображение','failed'=>'проверка не завершена'][setting('illustrator_probe_state')]??'ещё не запускалась').'. Обнови страницу для результата.</p>';
+        $probe=json_decode(setting('illustrator_probe_result','{}'),true);
+        if(is_array($probe)&&isset($probe['time']))echo '<p>'.h($probe['time']).' · Стоимость: $'.h((string)$probe['cost']).'</p><p>'.h($probe['error']).'</p>';
+        echo '</section>';
+    }
     illustration_actions_setup();
     $heartbeat=is_file($storage.'/illustrator-heartbeat')?(int)file_get_contents($storage.'/illustrator-heartbeat'):0;
     echo '<p>'.(illustration_backend()==='actions'?'Последний обмен с Actions: ':'Последний запуск: ').($heartbeat?h(date('d.m.Y H:i:s',$heartbeat)):'ещё не запускался').'</p>';

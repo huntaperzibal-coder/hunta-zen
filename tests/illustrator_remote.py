@@ -44,5 +44,14 @@ illustration_enqueue(post((int)$db->lastInsertId()),'Тёплый свет');'''
         db.execute("UPDATE illustration_jobs SET updated_at='2020-01-01T00:00:00+00:00' WHERE id=?",[stale['id']]);db.commit()
         assert bridge.call({'op':'claim'})['job'] is None
         assert db.execute('SELECT state FROM illustration_jobs WHERE id=?',[stale['id']]).fetchone()[0]=='unknown','stale lease not replayed'
+        db.execute("INSERT OR REPLACE INTO settings(key,value) VALUES('illustrator_probe_state','queued')");db.commit()
+        probe=bridge.call({'op':'probe_claim'})['probe']
+        assert probe['neutral_test'] and probe['api_key']=='local-test-secret'
+        assert bridge.call({'op':'probe_claim'})['probe'] is None,'diagnostic cannot be claimed twice'
+        try:bridge.call({'op':'probe_finish','lease':'wrong','result':{'state':'done'}});raise AssertionError('wrong probe lease accepted')
+        except RuntimeError:pass
+        assert bridge.call({'op':'probe_finish','lease':probe['lease'],'result':{'state':'failed','error':'test local-test-secret','cost':0}})['ok']
+        saved=json.loads(db.execute("SELECT value FROM settings WHERE key='illustrator_probe_result'").fetchone()[0])
+        assert saved['state']=='failed' and 'local-test-secret' not in saved['error']
         db.close()
 print('OK: private snapshot, real offline worker, delivery idempotency, lease authentication, unchanged author text, stale task protection')

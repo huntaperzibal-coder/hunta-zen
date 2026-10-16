@@ -68,6 +68,19 @@ def main():
     with tempfile.TemporaryDirectory(prefix='hunta-illustrator-') as temp:
         folder = pathlib.Path(temp); folder.chmod(0o700)
         bridge = Bridge(folder)
+        if os.environ.get('HUNTA_NEUTRAL_TEST') == 'true':
+            packet = bridge.call({'op':'probe_claim'}).get('probe')
+            if packet is None:
+                print('No pending diagnostic.'); return
+            if re.fullmatch(r'[A-Za-z0-9_-]+', packet['api_key']):
+                print('::add-mask::'+packet['api_key'], flush=True)
+            with tempfile.TemporaryDirectory(dir=folder, prefix='probe-') as work:
+                try:
+                    result = run_packet(packet, pathlib.Path(work))
+                except (RuntimeError, OSError, ValueError):
+                    result = {'state':'failed','cost':0,'error':'Проверка Actions прервалась. Результат запроса неизвестен; автоматического повтора нет.'}
+            bridge.call({'op':'probe_finish', 'lease':packet['lease'], 'result':result})
+            print('Diagnostic delivered to the author dashboard.'); return
         started = time.monotonic(); completed = 0
         while completed < 10 and time.monotonic()-started < 18*60:
             packet = bridge.call({'op':'claim'})['job']

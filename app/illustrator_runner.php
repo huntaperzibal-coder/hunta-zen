@@ -3,6 +3,14 @@ declare(strict_types=1);
 function illustration_actions_execute(array $packet,?callable $transport=null): array {
     if(PHP_SAPI!=='cli')throw new RuntimeException('CLI only');
     global $db,$storage;$transport??='illustration_request';
+    if(($packet['neutral_test']??false)===true){
+        try{
+            $result=$transport('images',['model'=>'google/gemini-3.1-flash-image','n'=>1,'prompt'=>'Заснеженная равнина на рассвете. Мягкая акварель. Без людей, животных и надписей.'],$packet['api_key']);
+            if(!is_string($result['data'][0]['b64_json']??null))throw new RuntimeException('Ответ не содержит изображения.');
+            illustration_store_image($result['data'][0]['b64_json']);
+            return ['state'=>'done','cost'=>max(0,(float)($result['usage']['cost']??0)),'error'=>''];
+        }catch(RuntimeException $e){return ['state'=>'failed','cost'=>0,'error'=>$e->getMessage()];}
+    }
 $db->exec(file_get_contents(ROOT.'/database.sql'));
 $db->prepare('INSERT INTO posts(id,slug,created_at,updated_at) VALUES(1,?,?,?)')->execute(['actions-only',now(),now()]);
 $db->prepare('INSERT INTO illustration_jobs(id,post_id,revision,snapshot,created_at,updated_at) VALUES(1,1,?,?,?,?)')->execute([$packet['revision'],json_encode($packet['snapshot'],JSON_UNESCAPED_UNICODE|JSON_THROW_ON_ERROR),now(),now()]);

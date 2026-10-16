@@ -1,6 +1,11 @@
 name: Story illustrator
 on:
   workflow_dispatch:
+    inputs:
+      neutral_test:
+        description: One paid neutral image test, no story or references
+        type: boolean
+        default: false
 permissions:
   contents: read
 concurrency:
@@ -22,6 +27,7 @@ jobs:
           coverage: none
       - name: Process private queue over restricted SSH
         env:
+          HUNTA_NEUTRAL_TEST: ${{ inputs.neutral_test }}
           HUNTA_SSH_TARGET: ${{ vars.HUNTA_SSH_TARGET }}
           HUNTA_SSH_KEY: ${{ secrets.HUNTA_SSH_KEY }}
           HUNTA_SSH_KNOWN_HOSTS: ${{ secrets.HUNTA_SSH_KNOWN_HOSTS }}
