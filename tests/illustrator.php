@@ -32,11 +32,11 @@ try{
     $p=save_post((int)$p['id'],['title'=>$p['title'],'body'=>'Новая версия текста','revision'=>$p['revision']]);
     $calls=[];
     $png='iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+j6ioAAAAASUVORK5CYII=';
-    $chosenStyle='watercolor';
+    $chosenStyle='book';
     $mock=function(string $path,array $payload,string $key)use(&$calls,$png,&$chosenStyle):array{
         $calls[]=[$path,$payload];verify_illustration($key==='local-test-secret','transport receives server key');
         $input=$path==='chat/completions'?json_decode($payload['messages'][1]['content'],true):[];
-        $selection=$chosenStyle==='not-in-catalog'?$chosenStyle:(isset($input['style_choices'][$chosenStyle])?$chosenStyle:array_key_first($input['style_choices']??['watercolor'=>[]]));
+        $selection=$chosenStyle==='not-in-catalog'?$chosenStyle:(isset($input['style_choices'][$chosenStyle])?$chosenStyle:array_key_first($input['style_choices']??['book'=>[]]));
         if($path==='chat/completions')return ['choices'=>[['message'=>['content'=>json_encode(['style_id'=>$selection,'style_reason'=>'Техника подчёркивает хрупкость образа','scene'=>'Вечер у костра','prompt'=>'Two friends by a campfire under stars.','characters'=>['Гена','Винни']])]]],'usage'=>['cost'=>0.001]];
         return ['data'=>[['b64_json'=>$png]],'usage'=>['cost'=>0.04]];
     };
@@ -89,12 +89,12 @@ try{
         verify_illustration(count($calls)===2 && $stylePlan['art_style']['id']===$chosenStyle && $stylePlan['art_style']['title']===illustration_art_styles()[$chosenStyle]['title'] && str_contains($calls[1][1]['prompt'],illustration_art_styles()[$chosenStyle]['direction']) && isset($styleInput['style_choices'][$chosenStyle]),'reader choice reaches painter and saved card with two calls: '.$chosenStyle);
     }
     $repeatJob=illustration_enqueue($p,'');$repeatSnapshot=json_decode($db->query('SELECT snapshot FROM illustration_jobs WHERE id='.$repeatJob)->fetchColumn(),true);
-    verify_illustration(!isset($repeatSnapshot['style_choices']['bosch']) && count($repeatSnapshot['style_choices'])===3,'last style is excluded from the next variant of the same post');
+    verify_illustration(isset($repeatSnapshot['style_choices']['bosch'],$repeatSnapshot['style_choices']['book'],$repeatSnapshot['style_choices']['magritte'],$repeatSnapshot['style_choices']['impressionism']) && count($repeatSnapshot['style_choices'])===4 && !isset($repeatSnapshot['previous_art_style']),'all four styles remain available without previous-choice history');
     $calls=[];$chosenStyle='bosch';illustration_run_one($mock);$repeatPlan=json_decode(illustration_result($repeatJob,(int)$p['id'])['plan'],true);
-    verify_illustration($repeatPlan['art_style']['id']!=='bosch','reader must choose a different technique instead of defaulting to the last one');
+    verify_illustration($repeatPlan['art_style']['id']==='bosch','reader may repeat a style when it fits the current story');
     $badStyleJob=illustration_enqueue($p,'');$calls=[];$chosenStyle='not-in-catalog';illustration_run_one($mock);
     verify_illustration(count($calls)===1 && $db->query('SELECT state FROM illustration_jobs WHERE id='.$badStyleJob)->fetchColumn()==='failed','unknown style stops before painter without retry');
-    $chosenStyle='watercolor';$legacyJob=illustration_enqueue($p,'');
+    $chosenStyle='book';$legacyJob=illustration_enqueue($p,'');
     $legacySnapshot=json_decode($db->query('SELECT snapshot FROM illustration_jobs WHERE id='.$legacyJob)->fetchColumn(),true);unset($legacySnapshot['style_choices']);
     $db->prepare('UPDATE illustration_jobs SET snapshot=? WHERE id=?')->execute([json_encode($legacySnapshot),$legacyJob]);
     $calls=[];illustration_run_one(function($path,$payload,$key)use($mock){$r=$mock($path,$payload,$key);if($path==='chat/completions'){$plan=json_decode($r['choices'][0]['message']['content'],true);unset($plan['style_id'],$plan['style_reason']);$r['choices'][0]['message']['content']=json_encode($plan);}return $r;});

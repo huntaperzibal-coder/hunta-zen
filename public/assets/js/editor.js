@@ -110,43 +110,24 @@
         ed.on('remove', () => window.removeEventListener('resize', matchReadingScale));
         ed.on('input change undo redo SetContent', () => { if (ready) { syncBody(); markDirty(); } });
         ed.addShortcut('meta+s', 'Сохранить запись', () => form.querySelector('[name="action"][value="save"]').click());
-        const pastedTitles = [];
-        ed.on('Undo Redo', () => {
-          const html = ed.getContent(), title = form.elements.title;
-          for (const change of [...pastedTitles].reverse()) {
-            if (html === change.before && title.value === change.afterTitle) { title.value = change.beforeTitle; markDirty(); break; }
-            if (html === change.after && title.value === change.beforeTitle) { title.value = change.afterTitle; markDirty(); break; }
-          }
-        });
-        const pasteFromChat = async () => {
-          let incoming = '';
-          try { incoming = await navigator.clipboard.readText(); } catch (_) { /* Ctrl+V in the dialog works without clipboard permission. */ }
-          const original = ed.getContent(), originalTitle = form.elements.title.value;
-          const firstLine = incoming.replace(/\r\n?/g, '\n').split('\n')[0].replace(/^#{1,6}\s+/, '').replace(/^\*\*(.*?)\*\*$/, '$1').trim();
-          const withTitle = firstLine !== '' && (firstLine === originalTitle.trim() || /^#\s+/.test(incoming));
-          const updatePreview = api => {
-            const preview = document.getElementById('dao-paste-preview');
-            if (preview) preview.innerHTML = window.DaoClipboard.fromText(api.getData().text, api.getData().withTitle).html;
-          };
-          const dialog = ed.windowManager.open({title: 'Вставить текст из чата', size: 'large',
-            initialData: {text: incoming, withTitle},
-            body: {type: 'panel', items: [
-              {type: 'textarea', name: 'text', label: 'Текст из буфера — можно вставить сюда через Ctrl+V'},
-              {type: 'checkbox', name: 'withTitle', label: 'Первая строка — заголовок'},
-              {type: 'htmlpanel', html: '<p>Пустые строки сохраняют паузы. Жирный и курсив из Markdown сохраняются. Замена применяется только после подтверждения; доступна отмена Ctrl+Z.</p><details open><summary>Предпросмотр</summary><div id="dao-paste-preview"></div></details>'}
-            ]},
-            buttons: [{type: 'cancel', text: 'Отмена'}, {type: 'submit', text: 'Заменить текст', primary: true}],
-            onChange: updatePreview,
-            onSubmit: api => {
-              if (ed.getContent() !== original || form.elements.title.value !== originalTitle) { ed.windowManager.alert('Запись изменилась, пока было открыто окно. Закрой его и вставь текст заново.'); return; }
-              const data = api.getData(), parsed = window.DaoClipboard.fromText(data.text, data.withTitle);
-              if (!parsed.html || (data.withTitle && !parsed.title)) { ed.windowManager.alert('Вставь текст рассказа. Пустой буфер не заменяет запись.'); return; }
-              ed.undoManager.add(); ed.undoManager.transact(() => ed.setContent(parsed.html));
-              if (data.withTitle) { form.elements.title.value = parsed.title; pastedTitles.push({before: original, after: ed.getContent(), beforeTitle: originalTitle, afterTitle: parsed.title}); }
-              syncBody(); markDirty(); api.close();
-            }
-          });
-          updatePreview(dialog);
+        let pasting = false;
+        const pasteFromClipboard = async () => {
+          if (pasting) return;
+          pasting = true;
+          const original = ed.getContent();
+          try {
+            const text = await navigator.clipboard.readText();
+            if (ed.removed) return;
+            const parsed = window.DaoClipboard.fromText(text);
+            if (!parsed.html) { status.textContent = 'Буфер пуст — текст не изменён'; return; }
+            if (ed.getContent() !== original) { status.textContent = 'Текст изменился во время чтения буфера. Нажми «Вставить текст» ещё раз.'; return; }
+            ed.undoManager.add();
+            ed.undoManager.transact(() => ed.setContent(parsed.html));
+            syncBody(); markDirty(); ed.focus();
+            status.textContent = 'Текст заменён из буфера. Отмена — Ctrl+Z';
+          } catch (_) {
+            ed.windowManager.alert('Браузер не разрешил прочитать буфер. Разреши доступ к буферу обмена для сайта и нажми «Вставить текст» ещё раз.');
+          } finally { pasting = false; }
         };
         ed.ui.registry.addButton('daocopyall', {text: 'Скопировать всё', tooltip: 'Скопировать заголовок и весь текст для работы в чате', onAction: async () => {
           const html = ed.getContent(), title = form.elements.title.value;
@@ -163,7 +144,7 @@
             ed.windowManager.open({title: 'Скопировать текст', size: 'large', initialData: {text: plain}, body: {type: 'panel', items: [{type: 'textarea', name: 'text', label: 'Браузер не разрешил копирование. Выдели текст и нажми Ctrl+C.'}]}, buttons: [{type: 'cancel', text: 'Закрыть'}]});
           }
         }});
-        ed.ui.registry.addButton('daopasteall', {text: 'Вставить из буфера', tooltip: 'Вставить готовый текст с предпросмотром перед заменой', onAction: pasteFromChat});
+        ed.ui.registry.addButton('daopasteall', {text: 'Вставить текст', tooltip: 'Полностью заменить текст редактора содержимым буфера (отмена: Ctrl+Z)', onAction: pasteFromClipboard});
         ed.ui.registry.addButton('daosave', {icon: 'save', tooltip: 'Сохранить запись (Ctrl+S)', onAction: () => form.querySelector('[name="action"][value="save"]').click()});
         ed.ui.registry.addButton('daophoto', {
           icon: 'image', text: 'Фото', tooltip: 'Загрузить фотографию в текст',
