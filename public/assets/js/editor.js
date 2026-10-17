@@ -53,11 +53,11 @@
       language: 'ru', language_url: '/assets/tinymce/langs/ru.js',
       plugins: 'autoresize lists advlist autolink link image fullscreen searchreplace wordcount code table charmap',
       menubar: false, promotion: false, branding: false,
-      toolbar: 'undo redo | blocks | bold italic underline strikethrough | bullist numlist blockquote | link daophoto image table | alignleft aligncenter alignright | removeformat | searchreplace fullscreen | daosave',
+      toolbar: 'undo redo | blocks | bold italic underline strikethrough | bullist numlist blockquote | link daophoto image table | alignleft aligncenter alignright | removeformat daomarks | searchreplace fullscreen | daosave',
       toolbar_mode: 'sliding', block_formats: 'Абзац=p; Подзаголовок=h2; Малый заголовок=h3',
       height: 760, min_height: window.innerWidth <= 700 ? 480 : 760, max_height: 6000,
       autoresize_bottom_margin: 24, autoresize_overflow_padding: 22, resize: true, elementpath: false,
-      content_css: ['/assets/css/article-editor.css?v=5', '/assets/css/reading-type.css?v=1'],
+      content_css: ['/assets/css/article-editor.css?v=6', '/assets/css/reading-type.css?v=1'],
       convert_urls: false, relative_urls: false, remove_script_host: true,
       paste_data_images: true, automatic_uploads: true,
       images_file_types: 'jpg,jpeg,png,webp', images_reuse_filename: false,
@@ -76,6 +76,28 @@
       },
       setup: ed => {
         let ready = false;
+        const refreshMarks = () => {
+          const body = ed.getBody();
+          if (!body) return;
+          ed.undoManager.ignore(() => {
+            body.querySelectorAll('.dao-break-mark').forEach(mark => mark.remove());
+            if (body.classList.contains('dao-show-marks')) body.querySelectorAll('br:not([data-mce-bogus])').forEach(br => {
+              const mark = ed.getDoc().createElement('span');
+              mark.className = 'dao-break-mark'; mark.dataset.mceBogus = 'all';
+              mark.contentEditable = 'false'; mark.setAttribute('aria-hidden', 'true'); mark.textContent = '↵';
+              br.before(mark);
+            });
+          });
+        };
+        ed.on('input SetContent Undo Redo', refreshMarks);
+        ed.ui.registry.addToggleButton('daomarks', {
+          text: '¶', tooltip: 'Разметка: ¶ — абзац (Enter), ↵ — перенос (Shift+Enter). Рамка показывает границы абзаца.',
+          onAction: api => {
+            const visible = ed.getBody().classList.toggle('dao-show-marks');
+            refreshMarks();
+            api.setActive(visible);
+          }
+        });
         const matchReadingScale = () => {
           if (!ready || ed.removed) return;
           const bodyScale = parseFloat(getComputedStyle(document.body).zoom) || 1;

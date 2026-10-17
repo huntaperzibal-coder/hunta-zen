@@ -119,7 +119,7 @@ if ($view==='login') {
         telegram_editor($p,$delivery?:null);
         echo '</form>';
         illustration_editor($p);
-        echo '<script src="/assets/tinymce/tinymce.min.js?v=8.5.0" defer></script><script src="/assets/js/editor.js?v=6" defer></script>';
+        echo '<script src="/assets/tinymce/tinymce.min.js?v=8.5.0" defer></script><script src="/assets/js/editor.js?v=7" defer></script>';
     }
 } elseif ($view==='illustrator') {
     illustration_settings_page();

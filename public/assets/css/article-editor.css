@@ -2,3 +2,8 @@
 body{box-sizing:border-box;max-width:658px;margin:18px auto;padding:0 16px;color:#292c2d;background:#fff;overflow-wrap:anywhere}
 a{color:#365c75;text-underline-offset:3px}th{background:#eaf0f2}.align-left{text-align:left}.align-center{text-align:center}.align-right{text-align:right}.align-justify{text-align:justify}
 @media(max-width:600px){body{margin:14px auto;padding:0 12px}}
+
+/* Editor-only guides: generated marks never enter the saved story. */
+body.dao-show-marks :is(p,h2,h3,h4,blockquote,li){outline:1px dotted #b3c8d8;outline-offset:2px}
+body.dao-show-marks :is(p,h2,h3,h4,li)::after{content:'¶';color:#6389a6;font:12px/1 system-ui;opacity:.8;margin-left:3px;pointer-events:none}
+body .dao-break-mark{display:inline-block;width:0;overflow:visible;color:#6389a6;font:12px/1 system-ui;pointer-events:none;user-select:none}
