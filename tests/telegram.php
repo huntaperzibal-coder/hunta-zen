@@ -54,5 +54,18 @@ try{
     $calls=[];$reject=function($method,$payload)use(&$calls){$calls[]=$method;return ['ok'=>false,'error_code'=>400];};tg_fails(fn()=>telegram_send($legacy['id'],$reject),'rich API rejection stops conversion');tg_assert($calls===['sendRichMessage']&&$db->query("SELECT message_id FROM telegram_parts WHERE post_id=".$legacy['id']." AND kind='photo'")->fetchColumn()==901,'legacy photo is kept when replacement is rejected');
     $calls=[];telegram_send($legacy['id'],$mock);tg_assert(array_column($calls,0)===['sendRichMessage','deleteMessage'],'old photo replaced by one rich message after confirmed send');
     $connectionBefore=file_get_contents($dir.'/telegram-connection.php');tg_fails(fn()=>telegram_save_connection(['telegram_channel'=>'@denied_channel'],fn($method,$payload)=>$method==='getChatMember'?['ok'=>true,'result'=>['status'=>'member']]:$readOnly($method,$payload)),'missing admin rights rejected');tg_assert(file_get_contents($dir.'/telegram-connection.php')===$connectionBefore,'failed check preserves previous connection');
+    $diag=tg_post('transport-detail','Не выводить текст рассказа в диагностике');
+    telegram_schedule_post($diag['id'],date('Y-m-d\TH:i',time()+3600));$db->exec("UPDATE telegram_schedule SET due_at=0 WHERE state='scheduled'");$diagCalls=0;
+    telegram_run_due(function()use(&$diagCalls,$config){$diagCalls++;throw new TelegramTransportFailure(telegram_transport_detail('sendRichMessage',28,0,30.0).' '.$config['telegram_token'].' https://api.telegram.org/bot'.$config['telegram_token'].'/sendRichMessage');});
+    $error=$db->query('SELECT error FROM telegram_deliveries WHERE post_id='.$diag['id'])->fetchColumn();
+    tg_assert(str_contains($error,'cURL 28')&&str_contains($error,'истекло время ожидания')&&!str_contains($error,$config['telegram_token'])&&!str_contains($error,'api.telegram.org'),'safe timeout reason retained without token or URL');
+    $scheduledError=$db->query('SELECT error FROM telegram_schedule WHERE post_id='.$diag['id'])->fetchColumn();
+    tg_assert($scheduledError===$error,'scheduler records the same transport reason');
+    telegram_run_due($mock);tg_assert($diagCalls===1 && $db->query('SELECT state FROM telegram_deliveries WHERE post_id='.$diag['id'])->fetchColumn()==='unknown','diagnostics do not make uncertain delivery retryable');
+    $before=$db->query('SELECT * FROM telegram_schedule')->fetchAll();$deliveriesBefore=$db->query('SELECT * FROM telegram_deliveries')->fetchAll();$heartbeatBefore=file_get_contents($dir.'/telegram-heartbeat');
+    $process=proc_open([getenv('PHP_BIN')?:'php',ROOT.'/tools/telegram_diagnose.php','--offline'],[1=>['pipe','w'],2=>['pipe','w']],$pipes);
+    $output=stream_get_contents($pipes[1]);$stderr=stream_get_contents($pipes[2]);fclose($pipes[1]);fclose($pipes[2]);$exit=proc_close($process);
+    tg_assert($exit===0 && $stderr==='' && str_contains($output,'Последний запуск обработчика') && str_contains($output,'cURL 28') && !str_contains($output,$config['telegram_token'])&&!str_contains($output,'Не выводить текст рассказа'),'read-only CLI diagnosis reports queue, heartbeat and safe errors without story or token');
+    tg_assert($before===$db->query('SELECT * FROM telegram_schedule')->fetchAll() && $deliveriesBefore===$db->query('SELECT * FROM telegram_deliveries')->fetchAll() && $heartbeatBefore===file_get_contents($dir.'/telegram-heartbeat'),'diagnostic command changes neither queue, deliveries nor heartbeat');
     $db->exec(file_get_contents(ROOT.'/database.sql'));tg_assert(post($p['id'])['body']==='Новая версия','migration preserves existing stories');
 }finally{$db=null;foreach(glob($dir.'/photos/*') as $f)unlink($f);rmdir($dir.'/photos');foreach(glob($dir.'/*') as $f)if(is_file($f))unlink($f);rmdir($dir);}

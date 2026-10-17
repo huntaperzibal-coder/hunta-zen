@@ -149,6 +149,21 @@ function telegram_plan(array $p): array {
     if($photo!=='')$rich['media']=[['id'=>'illustration','media'=>['type'=>'photo','media'=>'attach://picture']]];
     return [['kind'=>'text','ordinal'=>0,'rich_message'=>$rich,'photo'=>$photo]];
 }
+/** Only fixed transport metadata is exposed; never a request URL or raw response. */
+class TelegramTransportFailure extends RuntimeException {}
+function telegram_safe_error(string $message): string {
+    global $config;
+    $token=(string)($config['telegram_token']??'');
+    if($token!=='')$message=str_replace($token,'[токен скрыт]',$message);
+    $message=preg_replace('~https?://[^\s<>]+~iu','[адрес скрыт]',$message)??'';
+    $message=preg_replace('~[0-9]{5,}:[A-Za-z0-9_-]{20,}~','[токен скрыт]',$message)??'';
+    return mb_substr(trim(preg_replace('/[\x00-\x20\x7f]+/u',' ',strip_tags($message))??''),0,800);
+}
+function telegram_transport_detail(string $method,int $errno,int $status,float $seconds): string {
+    $reason=match($errno){5,6=>'не удалось определить адрес сервера',7=>'не удалось подключиться',28=>'истекло время ожидания',35=>'ошибка TLS',51,60=>'ошибка сертификата',52=>'пустой ответ сервера',55,56=>'соединение прервано',0=>$status>=500?'ошибка сервера Telegram':'ответ Telegram не распознан',default=>'сбой соединения'};
+    $method=preg_replace('/[^A-Za-z]/','',$method)??'';
+    return $method.': '.$reason.'; cURL '.$errno.'; HTTP '.$status.'; '.number_format($seconds,1,'.','').' с.';
+}
 /** Raw response is never logged: URL contains the bot token. */
 function telegram_request(string $method,array $payload): array {
     global $config;
@@ -157,10 +172,10 @@ function telegram_request(string $method,array $payload): array {
     $curl=curl_init('https://api.telegram.org/bot'.$config['telegram_token'].'/'.$method);
     foreach($payload as $k=>$value)if(is_array($value))$payload[$k]=json_encode($value,JSON_UNESCAPED_UNICODE|JSON_THROW_ON_ERROR);
     curl_setopt_array($curl,[CURLOPT_POST=>true,CURLOPT_POSTFIELDS=>$payload,CURLOPT_RETURNTRANSFER=>true,CURLOPT_CONNECTTIMEOUT=>10,CURLOPT_TIMEOUT=>30,CURLOPT_PROTOCOLS=>CURLPROTO_HTTPS]);
-    $raw=curl_exec($curl);$status=curl_getinfo($curl,CURLINFO_HTTP_CODE);curl_close($curl);
-    if($raw===false || $status>=500 || !$status)throw new RuntimeException('Не получен ответ Telegram.');
+    $raw=curl_exec($curl);$status=(int)curl_getinfo($curl,CURLINFO_HTTP_CODE);$errno=curl_errno($curl);$seconds=(float)curl_getinfo($curl,CURLINFO_TOTAL_TIME);curl_close($curl);
+    if($raw===false || $status>=500 || !$status)throw new TelegramTransportFailure(telegram_transport_detail($method,$errno,$status,$seconds));
     $response=json_decode($raw,true);
-    if(!is_array($response)||!isset($response['ok']))throw new RuntimeException('Ответ Telegram не распознан.');
+    if(!is_array($response)||!isset($response['ok']))throw new TelegramTransportFailure(telegram_transport_detail($method,$errno,$status,$seconds));
     return $response;
 }
 function telegram_state(int $id,string $channel,string $state,string $error=''): void {
@@ -198,7 +213,11 @@ function telegram_send(int $id,?callable $transport=null,?array $snapshot=null):
             }
             $db->prepare("INSERT INTO telegram_parts(post_id,channel,kind,ordinal,message_id,state,operation) VALUES(?,?,?,?,?,'sending',?) ON CONFLICT(post_id,channel,kind,ordinal) DO UPDATE SET state='sending',operation=excluded.operation")->execute([$id,$channel,$part['kind'],$part['ordinal'],$message,$delete?'delete':'upsert']);
             try{$response=$transport?$transport($method,$payload):telegram_request($method,$payload);if(!is_array($response)||!isset($response['ok']))throw new RuntimeException('Invalid response');}
-            catch(Throwable $e){telegram_state($id,$channel,'unknown','Ответ не получен. Проверь канал.');throw new RuntimeException('Результат отправки неизвестен. Проверь канал; автоматического повтора не будет.');}
+            catch(Throwable $e){
+                $detail=$e instanceof TelegramTransportFailure?' Причина: '.telegram_safe_error($e->getMessage()):'';
+                $error='Результат отправки неизвестен. Проверь канал; автоматического повтора не будет.'.$detail;
+                telegram_state($id,$channel,'unknown',$error);throw new RuntimeException($error);
+            }
             if(!$response['ok']){
                 $description=(string)($response['description']??'');
                 $safeRepeat=($message && str_contains($description,'message is not modified'))||($delete && str_contains($description,'message to delete not found'));
