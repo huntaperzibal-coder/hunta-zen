@@ -209,7 +209,7 @@ function illustration_run_one(?callable $transport=null): bool {
         if(is_array($s['style_profile']??null))$plan['style_profile']=$s['style_profile'];
         $cost=max(0,(float)($reader['usage']['cost']??0));
         $db->prepare('UPDATE illustration_jobs SET plan=?,cost=? WHERE id=?')->execute([json_encode($plan,JSON_UNESCAPED_UNICODE|JSON_THROW_ON_ERROR),$cost,$job['id']]);
-        $payload=['model'=>$settings['painter'],'n'=>1,'prompt'=>"Создай одну цельную концептуальную иллюстрацию философской мысли. Указанная ниже техника и палитра обязательны; если описание метафоры предлагает другую гамму, сохрани гамму серии. Без узнаваемых персонажей мультфильмов, надписей, комикса и коллажа.\nТехника и палитра: ".$settings['style']."\nВизуальная метафора: ".$plan['prompt']];
+        $payload=['model'=>$settings['painter'],'n'=>1,'aspect_ratio'=>'16:9','prompt'=>"Создай одну цельную концептуальную иллюстрацию философской мысли. Горизонтальная композиция 16:9. Указанная ниже техника и палитра обязательны; если описание метафоры предлагает другую гамму, сохрани гамму серии. Без узнаваемых персонажей мультфильмов, надписей, комикса и коллажа.\nТехника и палитра: ".$settings['style']."\nВизуальная метафора: ".$plan['prompt']];
         foreach($settings['references'] as $name){
             if(!preg_match('/^[a-f0-9]{32}\.(png|jpg|webp)$/D',$name))throw new RuntimeException('Некорректный референс.');
             $file=$storage.'/photos/'.$name;

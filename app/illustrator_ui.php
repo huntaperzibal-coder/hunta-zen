@@ -4,7 +4,7 @@ function illustration_editor(array $p): void {
     global $db,$storage;
     echo '<section id="illustrations" class="illustrator"><h2>Иллюстрации к истории</h2><p class="hint">Иллюстратор найдёт главную мысль текста и выразит её одним визуальным образом. Каждый запуск создаёт один вариант. Текст сохранится перед запуском.</p>';
     $profile=illustration_style_profile((string)($p['category_slug']??''));
-    echo '<p class="hint">Стиль по категории: '.h($profile['title']??'общая техника и палитра из настроек').'.</p>';
+    echo '<p class="hint">Стиль по категории: '.h($profile['title']??'общая техника и палитра из настроек').'. Формат: горизонтальный 16:9.</p>';
     if(illustration_key()==='')echo '<p><a href="/admin.php?view=illustrator">Подключить OpenRouter →</a></p>';
     echo '<label for="illustration_wishes">Пожелания художнику</label><textarea id="illustration_wishes" form="editor" class="user-input" name="illustration_wishes" rows="3" maxlength="2000" placeholder="Можно оставить пустым. Или: подчеркни парадокс, больше пустоты, тонкая ирония…"></textarea><button form="editor" class="btn-main" name="action" value="illustrate"'.(illustration_key()===''?' disabled':'').'>Проиллюстрировать / ещё вариант</button> <a href="/admin.php?view=illustrator">Стиль иллюстраций</a>';
     if(illustration_backend()==='actions')echo '<p class="hint">Обработка: GitHub Actions. Тексты и картинки передаются по SSH.</p><button form="editor" class="btn-secondary" name="action" value="illustration_dispatch">Запустить ожидающую очередь</button> <a href="https://github.com/'.ILLUSTRATOR_REPOSITORY.'/actions/workflows/illustrator.yml" target="_blank" rel="noopener">Состояние в GitHub ↗</a>';

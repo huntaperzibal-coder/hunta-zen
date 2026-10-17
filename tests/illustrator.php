@@ -74,6 +74,7 @@ try{
         $readerInput=json_decode($calls[0][1]['messages'][1]['content'],true);
         verify_illustration($snapshot['style_profile']['id']===$styleId&&$plan['style_profile']['id']===$styleId&&$readerInput['art_direction']===$snapshot['settings']['style']&&str_contains($calls[1][1]['prompt'],$snapshot['settings']['style']),'category palette reaches reader and painter and survives later category change: '.$slug);
     }
+    verify_illustration($calls[1][1]['aspect_ratio']==='16:9' && str_contains($calls[1][1]['prompt'],'Горизонтальная композиция 16:9') && $calls[1][1]['model']===$snapshot['settings']['painter'],'story illustration requests explicit landscape ratio and retains selected painter');
     verify_illustration(illustration_style_profile('')===null,'uncategorized posts retain general style');
     $simpleInput=json_decode($calls[0][1]['messages'][1]['content'],true);
     verify_illustration(!isset($simpleInput['previous_images']) && !str_contains($calls[0][1]['messages'][0]['content'],'деталь-якорь') && !str_contains($calls[1][1]['prompt'],'Выразительный приём:'),'restored simple reader and painter prompts without history or required anchors');
