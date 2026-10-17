@@ -3,6 +3,25 @@ declare(strict_types=1);
 function telegram_status_label(string $state): string {
     return ['sent'=>'Отправлено','sending'=>'Проверь канал: отправка не завершена','unknown'=>'Проверь канал: результат неизвестен','failed'=>'Отправка остановлена','scheduled'=>'Запланировано','running'=>'Отправка началась','cancelled'=>'Отменено'][$state]??'Ещё не отправлено';
 }
+/** Delivery records describe the selected channel, not live Telegram membership. */
+function telegram_list_indicator(array $row): string {
+    $delivery=(string)($row['telegram_state']??'');
+    $schedule=(string)($row['telegram_schedule_state']??'');
+    $kind='none';$label='Не размещено';$note='';
+    $hint='Нет подтверждённой отправки из админки в выбранный канал.';
+    if($delivery==='sent'){
+        $kind='sent';$label='✓ Размещено';$hint='Последняя отправка в выбранный канал подтверждена Telegram. Правки на сайте не отправляются автоматически.';
+        if(in_array($schedule,['scheduled','running'],true))$note=$schedule==='running'?'Обновление отправляется':'Обновление запланировано';
+    }elseif(in_array($delivery,['unknown','sending'],true)){
+        $kind='check';$label='Проверь канал';$hint='Результат отправки не подтверждён. Сообщение могло попасть в канал; сначала проверь его.';
+    }elseif(in_array($schedule,['scheduled','running'],true)){
+        $kind='pending';$label=$schedule==='running'?'Отправляется':'Запланировано';$hint='Публикация ещё не подтверждена.';
+    }elseif($delivery==='failed'||$schedule==='failed'){
+        $kind='failed';$label='Ошибка отправки';$hint='Отправка остановлена. Подробности и проверка результата — в редакторе.';
+    }
+    if($schedule==='scheduled' && !empty($row['telegram_due_at']))$hint.=' Назначено на '.(new DateTimeImmutable('@'.(int)$row['telegram_due_at']))->setTimezone(new DateTimeZone('Asia/Novosibirsk'))->format('d.m.Y H:i').' (UTC+7).';
+    return '<a class="tg-list-link" href="/admin.php?view=edit&amp;id='.(int)$row['id'].'#telegram" title="'.h($hint).'"><span class="status-chip tg-list-status tg-list-'.$kind.'">'.h($label).'</span>'.($note!==''?'<small class="tg-list-note">'.h($note).'</small>':'').'</a>';
+}
 function telegram_editor(array $p,?array $delivery): void {
     global $db,$config;
     $channel=(string)($config['telegram_channel']??'');

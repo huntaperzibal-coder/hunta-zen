@@ -1,10 +1,10 @@
 """Real HTTP checks; no external requests or real Telegram credentials."""
-import base64, http.cookiejar, json, os, pathlib, re, socket, subprocess, tempfile, time, urllib.error, urllib.parse, urllib.request
+import base64, http.cookiejar, json, os, pathlib, re, socket, sqlite3, subprocess, tempfile, time, urllib.error, urllib.parse, urllib.request
 ROOT=pathlib.Path(__file__).resolve().parents[1]
 PHP=os.environ.get('PHP_BIN','php')
 with tempfile.TemporaryDirectory(prefix='hunta-http-') as tmp:
     storage=pathlib.Path(tmp);(storage/'photos').mkdir()
-    config={'storage':tmp,'site_url':'https://example.test','login':'author','password_hash':subprocess.check_output([PHP,'-r',"echo password_hash('test-password-only',PASSWORD_DEFAULT);"],text=True),'telegram_token':'','telegram_channel':''}
+    config={'storage':tmp,'site_url':'https://example.test','login':'author','password_hash':subprocess.check_output([PHP,'-r',"echo password_hash('test-password-only',PASSWORD_DEFAULT);"],text=True),'telegram_token':'','telegram_channel':'-100100'}
     (storage/'config.php').write_text('<?php return json_decode('+repr(json.dumps(config))+',true);')
     env={**os.environ,'HUNTA_CONFIG':str(storage/'config.php')}
     subprocess.run([PHP,str(ROOT/'tools/migrate.php')],env=env,check=True,capture_output=True)
@@ -99,6 +99,27 @@ with tempfile.TemporaryDirectory(prefix='hunta-http-') as tmp:
             assert request('/admin.php?view=illustrator',{'action':'illustrator_settings','reader':'x/y','painter':'x/y'})[0]==403,'illustrator settings require csrf'
             assert request('/editor-upload.php',b'')[0]==403,'upload requires csrf'
             assert request('/editor-upload.php',b'',opener=anonymous)[0]==401,'upload requires login'
+            # Stored delivery status in the list, scoped to the selected channel; no Telegram requests.
+            with sqlite3.connect(storage/'blog.sqlite') as records:
+                def badge():
+                    code,panel,_=request('/admin.php?category=vinnie')
+                    assert code==200 and '<th>Telegram</th>' in panel
+                    assert f'href="/admin.php?view=edit&amp;id={pid}#telegram"' in panel
+                    return re.search(r'class="status-chip tg-list-status tg-list-([^" ]+)">([^<]+)',panel).groups()
+                assert badge()==('none','Не размещено')
+                records.execute("INSERT INTO telegram_deliveries(post_id,channel,state,updated_at) VALUES(?,'-100OTHER','sent',datetime('now'))",[pid]);records.commit()
+                assert badge()==('none','Не размещено'),'another channel must not mark the post as delivered'
+                records.execute("INSERT INTO telegram_deliveries(post_id,channel,state,updated_at) VALUES(?,'-100100','sent',datetime('now'))",[pid]);records.commit()
+                assert badge()==('sent','✓ Размещено')
+                for state,expected in [('unknown',('check','Проверь канал')),('sending',('check','Проверь канал')),('failed',('failed','Ошибка отправки'))]:
+                    records.execute("UPDATE telegram_deliveries SET state=? WHERE post_id=? AND channel='-100100'",[state,pid]);records.commit();assert badge()==expected
+                records.execute("INSERT INTO telegram_schedule(post_id,channel,bot_fingerprint,snapshot,due_at,created_at,updated_at) VALUES(?,'-100100','test','{}',?,datetime('now'),datetime('now'))",[pid,int(time.time())+3600]);records.commit()
+                assert badge()==('pending','Запланировано')
+                records.execute("UPDATE telegram_deliveries SET state='sent' WHERE post_id=? AND channel='-100100'",[pid]);records.commit()
+                assert badge()==('sent','✓ Размещено') and 'Обновление запланировано' in request('/admin.php')[1]
+                records.execute("UPDATE telegram_schedule SET state='cancelled' WHERE post_id=?",[pid]);records.commit()
+                assert 'Обновление запланировано' not in request('/admin.php')[1]
+            assert 'tg-list-status' not in request('/',opener=anonymous)[1],'delivery markers remain private'
             subprocess.run([PHP,str(ROOT/'tools/backup.php')],env=env,check=True,capture_output=True)
             copies=list((storage/'backups').iterdir());assert len(copies)==1 and (copies[0]/'photos'/photo).exists(),'backup photos'
             print('OK: HTTP login, CSRF, drafts, upload, private media, publishing, XSS, conflicts, backup')

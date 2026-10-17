@@ -29,3 +29,6 @@
 .orda-blog-content>.prose{zoom:calc(1 / var(--orda-ui-scale,1))}@media(max-width:700px){.orda-blog-content>.prose{zoom:1}}
 
 .orda-blog-content input[type="datetime-local"]{box-sizing:border-box;max-width:100%;min-height:36px;padding:8px 10px;border:1px solid var(--orda-border);border-radius:6px;background:#fff;color:var(--orda-text-main);font:14px var(--orda-font-main)}
+
+/* Telegram delivery markers in the story list. */
+.orda-blog-content .tg-list-link{display:inline-flex;flex-direction:column;gap:4px;text-decoration:none;align-items:flex-start}.orda-blog-content .tg-list-link:hover .status-chip{box-shadow:0 0 0 1px currentColor}.orda-blog-content .tg-list-status{font-size:11px;padding:4px 8px}.orda-blog-content .tg-list-sent{background:#e1f0e4;color:#216e39}.orda-blog-content .tg-list-pending{background:#e4edfa;color:#285a92}.orda-blog-content .tg-list-check{background:#fff0ce;color:#805500}.orda-blog-content .tg-list-failed{background:#fbe5e3;color:#a1322b}.orda-blog-content .tg-list-note{font-size:10px;line-height:1.3;color:var(--orda-text-muted);max-width:145px}
