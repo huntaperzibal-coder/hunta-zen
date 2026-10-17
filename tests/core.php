@@ -16,13 +16,13 @@ try {
     $input['revision']=$p['revision'];$input['title']='Новое название';$p=save_post($id,$input);check($p['slug']==='mysli-na-perevale','published URL stable');
     check(!str_contains(render_body($p['body']),'<script>'),'HTML escaped');
     $calls=[];$mock=function($method,$payload)use(&$calls){$calls[]=$method;return ['ok'=>true,'result'=>['message_id'=>42]];};
-    telegram_send($id,$mock);telegram_send($id,$mock);check($calls===['sendMessage','editMessageText'],'second send edits original');
+    telegram_send($id,$mock);telegram_send($id,$mock);check($calls===['sendRichMessage','editMessageText'],'second send edits original');
     fails(fn()=>telegram_send($id,fn()=>throw new RuntimeException('timeout')),'timeout recorded');
     $count=0;fails(function()use($id,&$count){telegram_send($id,function()use(&$count){$count++;});},'unknown result blocks duplicate');check($count===0,'no automatic retry');
     $db->exec("UPDATE telegram_deliveries SET state='sent'");
     fails(fn()=>telegram_send($id,fn()=>['ok'=>false,'error_code'=>403]),'API rejection');
     check($db->query('SELECT state FROM telegram_deliveries')->fetchColumn()==='failed','known failure recorded');
-    $input['revision']=$p['revision'];$input['telegram_text']=str_repeat('я',4097);$p=save_post($id,$input);$calls=[];telegram_send($id,$mock);check(count($calls)===2,'long story split without truncation');
+    $input['revision']=$p['revision'];$input['telegram_text']=str_repeat('я',4097);$p=save_post($id,$input);$calls=[];telegram_send($id,$mock);check(count($calls)===1,'long story remains one complete rich message');
     $input['revision']=$p['revision'];$input['telegram_text']='';$input['status']='draft';$p=save_post($id,$input);fails(fn()=>telegram_send($id,$mock),'draft cannot go to channel');
     $db->exec(file_get_contents(ROOT.'/database.sql'));check(post($id)['body']===$input['body'],'migration preserves content');
     $db->exec('VACUUM INTO '.$db->quote($dir.'/copy.sqlite'));$copy=new PDO('sqlite:'.$dir.'/copy.sqlite');check($copy->query('PRAGMA integrity_check')->fetchColumn()==='ok','consistent SQLite snapshot');

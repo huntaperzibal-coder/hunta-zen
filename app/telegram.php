@@ -91,22 +91,63 @@ function telegram_chunks(array $document,int $limit=3900): array {
     }
     return $chunks;
 }
+/** Telegram Bot API Rich Messages: header, image and story in one message. */
+function telegram_rich_body(string $body): string {
+    global $config;
+    $doc=new DOMDocument('1.0','UTF-8');$previous=libxml_use_internal_errors(true);
+    try{$doc->loadHTML('<?xml encoding="UTF-8"><html><body>'.body_for_editor($body).'</body></html>',LIBXML_NONET|LIBXML_NOERROR|LIBXML_NOWARNING);}
+    finally{libxml_clear_errors();libxml_use_internal_errors($previous);}
+    $walk=function(DOMNode $node)use(&$walk,$config):string{
+        if($node instanceof DOMText)return h($node->nodeValue);
+        if(!$node instanceof DOMElement)return '';
+        $tag=strtolower($node->tagName);
+        if(in_array($tag,['img','script','style'],true))return '';
+        $content='';foreach($node->childNodes as $child)$content.=$walk($child);
+        if($tag==='a'){
+            $url=safe_article_link($node->getAttribute('href'));
+            if(!$url||str_starts_with($url,'#'))return $content;
+            if(str_starts_with($url,'/'))$url=rtrim($config['site_url'],'/').$url;
+            return '<a href="'.h($url).'">'.$content.'</a>';
+        }
+        if($tag==='figcaption')$tag='p';
+        if(!in_array($tag,['p','h2','h3','h4','strong','b','em','i','u','s','blockquote','pre','code','ul','ol','li','table','tr','td','th','br','hr','sub','sup'],true))return $content;
+        if(in_array($tag,['br','hr'],true))return '<'.$tag.'>';
+        $attrs='';if(in_array($tag,['td','th'],true))foreach(['colspan','rowspan'] as $key){$value=(int)$node->getAttribute($key);if($value>1 && $value<=100)$attrs.=' '.$key.'="'.$value.'"';}
+        return '<'.$tag.$attrs.'>'.$content.'</'.$tag.'>';
+    };
+    $html='';foreach($doc->getElementsByTagName('body')->item(0)->childNodes as $node)$html.=$walk($node);
+    return $html;
+}
 function telegram_plan(array $p): array {
-    global $storage;
-    $document=telegram_document($p);$parts=[];$photo=(string)$p['cover'];
-    if($photo===''){
-        if(preg_match('~(?:file=|\()([a-f0-9]{32}\.(?:jpg|png|webp))~',body_for_editor($p['body']),$m))$photo=$m[1];
-    }
+    global $storage,$config;
+    $photo=(string)$p['cover'];
+    if($photo==='' && preg_match('~(?:file=|\()([a-f0-9]{32}\.(?:jpg|png|webp))~',body_for_editor($p['body']),$m))$photo=$m[1];
     if($photo!==''){
-        if(!preg_match('/^[a-f0-9]{32}\.(jpg|png|webp)$/D',$photo) || !is_file($storage.'/photos/'.$photo))throw new RuntimeException('Иллюстрация недоступна. Проверь фотографию перед отправкой.');
-        // Telegram photos are limited to 10 MB. Fail before sending any message.
+        if(!preg_match('/^[a-f0-9]{32}\.(jpg|png|webp)$/D',$photo)||!is_file($storage.'/photos/'.$photo))throw new RuntimeException('Иллюстрация недоступна. Проверь фотографию перед отправкой.');
         if(filesize($storage.'/photos/'.$photo)>10*1024*1024)throw new RuntimeException('Иллюстрация больше 10 МБ. Уменьши её перед отправкой в Telegram.');
-        $short=telegram_units($document['text'])<=1024;
-        $parts[]=['kind'=>'photo','ordinal'=>0,'photo'=>$photo,'caption'=>$short?$document['text']:$p['title'],'caption_entities'=>$short?$document['entities']:[]];
-        if($short)return $parts;
     }
-    foreach(telegram_chunks($document) as $i=>$chunk)$parts[]=['kind'=>'text','ordinal'=>$i]+$chunk;
-    return $parts;
+    $slug=(string)($p['category_slug']??'');$icon=match($slug){'vinnie'=>'☯️','gena'=>'⚙️',default=>''};
+    $html=$icon!==''?'<p>'.$icon.' <b>'.h(category_public_title($slug,'')).'</b> · <i>'.h(category_public_caption($slug,'')).'</i></p>':'';
+    if($photo!=='')$html.='<img src="tg://photo?id=illustration">';
+    $html.='<p><b>'.h($p['title']).'</b></p>';
+    $html.=trim((string)$p['telegram_text'])!==''?'<p>'.str_replace("\n",'<br>',h(trim($p['telegram_text']))).'</p>':telegram_rich_body($p['body']);
+    $url=rtrim($config['site_url'],'/').'/?p='.rawurlencode($p['slug']);$html.='<p><a href="'.h($url).'">'.h($url).'</a></p>';
+    // Reject oversized messages before any network call; never truncate or split implicitly.
+    if(mb_strlen(html_entity_decode(strip_tags($html),ENT_QUOTES|ENT_HTML5,'UTF-8'))>32768)throw new RuntimeException('Рассказ больше лимита одного составного сообщения Telegram (32768 символов). Сократи текст для канала.');
+    $doc=new DOMDocument('1.0','UTF-8');$previous=libxml_use_internal_errors(true);
+    try{$doc->loadHTML('<?xml encoding="UTF-8"><html><body>'.$html.'</body></html>',LIBXML_NONET|LIBXML_NOERROR|LIBXML_NOWARNING);}
+    finally{libxml_clear_errors();libxml_use_internal_errors($previous);}
+    $blocks=0;$check=function(DOMNode $node,int $depth=0)use(&$check,&$blocks):void{
+        if(!$node instanceof DOMElement)return;
+        if($depth>16)throw new RuntimeException('Слишком много вложенных уровней форматирования для Telegram.');
+        if(in_array(strtolower($node->tagName),['p','h2','h3','h4','pre','blockquote','ul','ol','li','table','tr','img','hr'],true))$blocks++;
+        foreach($node->childNodes as $child)$check($child,$depth+1);
+    };
+    foreach($doc->getElementsByTagName('body')->item(0)->childNodes as $node)$check($node);
+    if($blocks>500)throw new RuntimeException('Слишком много абзацев и блоков для одного сообщения Telegram (лимит 500).');
+    $rich=['html'=>$html];
+    if($photo!=='')$rich['media']=[['id'=>'illustration','media'=>['type'=>'photo','media'=>'attach://picture']]];
+    return [['kind'=>'text','ordinal'=>0,'rich_message'=>$rich,'photo'=>$photo]];
 }
 /** Raw response is never logged: URL contains the bot token. */
 function telegram_request(string $method,array $payload): array {
@@ -149,13 +190,11 @@ function telegram_send(int $id,?callable $transport=null,?array $snapshot=null):
             // Do not skip edits: Telegram may already have the same content; it confirms that safely.
             $payload=['chat_id'=>$channel];$method='sendMessage';
             if($delete){$method='deleteMessage';$payload['message_id']=(int)$message;}
-            elseif($part['kind']==='text'){
-                $method=$message?'editMessageText':'sendMessage';$payload+=['text'=>$part['text'],'entities'=>$part['entities'],'link_preview_options'=>['is_disabled'=>true]];
+            else{
+                $method=$message?'editMessageText':'sendRichMessage';
+                $payload['rich_message']=$part['rich_message'];
                 if($message)$payload['message_id']=(int)$message;
-            }else{
-                $file=new CURLFile($storage.'/photos/'.$part['photo'],mime_content_type($storage.'/photos/'.$part['photo']),'illustration.'.pathinfo($part['photo'],PATHINFO_EXTENSION));
-                if($message){$method='editMessageMedia';$payload+=['message_id'=>(int)$message,'media'=>['type'=>'photo','media'=>'attach://picture','caption'=>$part['caption'],'caption_entities'=>$part['caption_entities']],'picture'=>$file];}
-                else{$method='sendPhoto';$payload+=['photo'=>$file,'caption'=>$part['caption'],'caption_entities'=>$part['caption_entities']];}
+                if($part['photo']!=='')$payload['picture']=new CURLFile($storage.'/photos/'.$part['photo'],mime_content_type($storage.'/photos/'.$part['photo']),'illustration.'.pathinfo($part['photo'],PATHINFO_EXTENSION));
             }
             $db->prepare("INSERT INTO telegram_parts(post_id,channel,kind,ordinal,message_id,state,operation) VALUES(?,?,?,?,?,'sending',?) ON CONFLICT(post_id,channel,kind,ordinal) DO UPDATE SET state='sending',operation=excluded.operation")->execute([$id,$channel,$part['kind'],$part['ordinal'],$message,$delete?'delete':'upsert']);
             try{$response=$transport?$transport($method,$payload):telegram_request($method,$payload);if(!is_array($response)||!isset($response['ok']))throw new RuntimeException('Invalid response');}
@@ -165,8 +204,10 @@ function telegram_send(int $id,?callable $transport=null,?array $snapshot=null):
                 $safeRepeat=($message && str_contains($description,'message is not modified'))||($delete && str_contains($description,'message to delete not found'));
                 if(!$safeRepeat){
                     $db->prepare("UPDATE telegram_parts SET state='failed' WHERE post_id=? AND channel=? AND kind=? AND ordinal=?")->execute([$id,$channel,$part['kind'],$part['ordinal']]);
-                    telegram_state($id,$channel,'failed','Telegram отклонил запрос, код '.(int)($response['error_code']??0));
-                    throw new RuntimeException('Telegram отклонил запрос ('.(int)($response['error_code']??0).'). Уже отправленные части сохранены. Проверь права бота и канал.');
+                    $reason=mb_substr(str_replace((string)$config['telegram_token'],'[токен скрыт]',strip_tags($description)),0,300);
+                    $error='Telegram отклонил запрос ('.(int)($response['error_code']??0).')'.($reason!==''?': '.$reason:'. Проверь права бота и канал.');
+                    telegram_state($id,$channel,'failed',$error);
+                    throw new RuntimeException($error.' Уже отправленные сообщения сохранены.');
                 }
             }
             $resultId=$response['result']['message_id']??$message;
@@ -174,7 +215,7 @@ function telegram_send(int $id,?callable $transport=null,?array $snapshot=null):
             if($delete)$db->prepare('DELETE FROM telegram_parts WHERE post_id=? AND channel=? AND kind=? AND ordinal=?')->execute([$id,$channel,$part['kind'],$part['ordinal']]);
             else $db->prepare("UPDATE telegram_parts SET state='sent',message_id=?,content_hash=? WHERE post_id=? AND channel=? AND kind=? AND ordinal=?")->execute([$resultId,$hash,$id,$channel,$part['kind'],$part['ordinal']]);
         }
-        // message_id is only the legacy text pointer. Photo ids live in telegram_parts.
+        // One rich message uses the text slot; legacy photo slots are removed after confirmation.
         $q=$db->prepare("SELECT message_id FROM telegram_parts WHERE post_id=? AND channel=? AND kind='text' AND ordinal=0");$q->execute([$id,$channel]);
         $db->prepare("UPDATE telegram_deliveries SET state='sent',message_id=?,error='',updated_at=? WHERE post_id=? AND channel=?")->execute([$q->fetchColumn()?:null,now(),$id,$channel]);
         audit($delivery?'telegram:update':'telegram:send',$id);
