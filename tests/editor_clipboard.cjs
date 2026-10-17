@@ -1,0 +1,10 @@
+const fs=require('node:fs'),vm=require('node:vm'),assert=require('node:assert/strict');
+const scope={window:{}};vm.runInNewContext(fs.readFileSync('public/assets/js/editor-clipboard.js','utf8'),scope);const parse=scope.window.DaoClipboard.fromText;
+assert.equal(parse('— Реплика\n— Ответ\n\nПауза\n\n\nЕщё пауза').html,'<p>— Реплика<br>— Ответ</p><p>Пауза</p><p>&nbsp;</p><p>Ещё пауза</p>');
+assert.equal(parse('**Заголовок**\n\n**Жирный** и *курсив*',true).title,'Заголовок');
+assert.equal(parse('**Заголовок**\n\n**Жирный** и *курсив*',true).html,'<p><strong>Жирный</strong> и <em>курсив</em></p>');
+assert.equal(parse('Реплика\\\nОтвет').html,'<p>Реплика<br>Ответ</p>');
+assert.equal(parse('   ').html,'');
+const unsafe=parse('<img src=x onerror=alert(1)>\n<script>alert(1)</script>').html;assert(!unsafe.includes('<img'));assert(!unsafe.includes('<script>'));assert(unsafe.includes('&lt;img'));
+assert(!parse('[x](javascript:alert(1))').html.includes('<a '));
+console.log('OK: clipboard preserves paragraph pauses, line breaks and emphasis; imports no executable HTML');

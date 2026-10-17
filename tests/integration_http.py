@@ -49,16 +49,9 @@ with tempfile.TemporaryDirectory(prefix='hunta-http-') as tmp:
             anonymous=urllib.request.build_opener()
             assert 'Очень личный черновик' not in request('/',opener=anonymous)[1],'draft hidden'
             assert request('/?p=istoriya-script-x-script',opener=anonymous)[0]==404
-            assert request('/proofread.php?id='+pid+'&job=1',opener=anonymous)[0]==401,'proofreading status requires login'
-            assert request('/proofread.php',{'id':pid,'revision':revision,'body':'<p>Превет</p>'})[0]==403,'proofreading requires CSRF'
-            (storage/'openrouter-key.php').write_text("<?php return 'offline-only-key';")
-            code,proof,_=request('/proofread.php',{'id':pid,'revision':revision,'csrf':csrf,'body':'<p>Превет</p>'})
-            assert code==200,proof
-            proof_job=json.loads(proof)['job']
-            assert json.loads(request('/illustration-status.php?id='+pid)[1])==[],'corrections are not image variants'
-            assert json.loads(request('/proofread.php?id='+pid+'&job='+str(proof_job))[1])['state']=='queued','private correction queue'
-            assert request('/proofread.php',{'id':pid,'revision':0,'csrf':csrf,'body':'<p>Превет</p>'})[0]==409,'stale correction rejected'
-            assert 'Очень личный черновик' in request('/admin.php?view=edit&id='+pid)[1],'checking never replaces saved story'
+            assert '/assets/js/editor-clipboard.js?v=1' in html and '/assets/js/editor.js?v=11' in html,'clipboard helper loads before editor'
+            assert html.index('/assets/js/editor-clipboard.js') < html.index('/assets/js/editor.js'),'clipboard script order'
+            assert request('/proofread.php')[0]==404,'retired proofreading endpoint is unavailable'
             # Cover upload also saves the article; private photo must stay private.
             boundary='hunta-test-boundary';fields={**data,'action':'upload','revision':revision,'photo_kind':'cover'}
             parts=[]

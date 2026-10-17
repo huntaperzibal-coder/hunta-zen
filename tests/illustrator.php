@@ -35,7 +35,9 @@ try{
     $chosenStyle='watercolor';
     $mock=function(string $path,array $payload,string $key)use(&$calls,$png,&$chosenStyle):array{
         $calls[]=[$path,$payload];verify_illustration($key==='local-test-secret','transport receives server key');
-        if($path==='chat/completions')return ['choices'=>[['message'=>['content'=>json_encode(['style_id'=>$chosenStyle,'style_reason'=>'Техника подчёркивает хрупкость образа','scene'=>'Вечер у костра','prompt'=>'Two friends by a campfire under stars.','characters'=>['Гена','Винни']])]]],'usage'=>['cost'=>0.001]];
+        $input=$path==='chat/completions'?json_decode($payload['messages'][1]['content'],true):[];
+        $selection=$chosenStyle==='not-in-catalog'?$chosenStyle:(isset($input['style_choices'][$chosenStyle])?$chosenStyle:array_key_first($input['style_choices']??['watercolor'=>[]]));
+        if($path==='chat/completions')return ['choices'=>[['message'=>['content'=>json_encode(['style_id'=>$selection,'style_reason'=>'Техника подчёркивает хрупкость образа','scene'=>'Вечер у костра','prompt'=>'Two friends by a campfire under stars.','characters'=>['Гена','Винни']])]]],'usage'=>['cost'=>0.001]];
         return ['data'=>[['b64_json'=>$png]],'usage'=>['cost'=>0.04]];
     };
     illustration_run_one($mock);$job=illustration_result($id,(int)$p['id']);
@@ -86,6 +88,10 @@ try{
         $styleInput=json_decode($calls[0][1]['messages'][1]['content'],true);
         verify_illustration(count($calls)===2 && $stylePlan['art_style']['id']===$chosenStyle && $stylePlan['art_style']['title']===illustration_art_styles()[$chosenStyle]['title'] && str_contains($calls[1][1]['prompt'],illustration_art_styles()[$chosenStyle]['direction']) && isset($styleInput['style_choices'][$chosenStyle]),'reader choice reaches painter and saved card with two calls: '.$chosenStyle);
     }
+    $repeatJob=illustration_enqueue($p,'');$repeatSnapshot=json_decode($db->query('SELECT snapshot FROM illustration_jobs WHERE id='.$repeatJob)->fetchColumn(),true);
+    verify_illustration(!isset($repeatSnapshot['style_choices']['bosch']) && count($repeatSnapshot['style_choices'])===3,'last style is excluded from the next variant of the same post');
+    $calls=[];$chosenStyle='bosch';illustration_run_one($mock);$repeatPlan=json_decode(illustration_result($repeatJob,(int)$p['id'])['plan'],true);
+    verify_illustration($repeatPlan['art_style']['id']!=='bosch','reader must choose a different technique instead of defaulting to the last one');
     $badStyleJob=illustration_enqueue($p,'');$calls=[];$chosenStyle='not-in-catalog';illustration_run_one($mock);
     verify_illustration(count($calls)===1 && $db->query('SELECT state FROM illustration_jobs WHERE id='.$badStyleJob)->fetchColumn()==='failed','unknown style stops before painter without retry');
     $chosenStyle='watercolor';$legacyJob=illustration_enqueue($p,'');

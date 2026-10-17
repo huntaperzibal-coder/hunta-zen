@@ -53,7 +53,7 @@
       language: 'ru', language_url: '/assets/tinymce/langs/ru.js',
       plugins: 'autoresize lists advlist autolink link image fullscreen searchreplace wordcount code table charmap',
       menubar: false, promotion: false, branding: false,
-      toolbar: 'undo redo | daoproofread | blocks | bold italic underline strikethrough | bullist numlist blockquote | link daophoto image table | alignleft aligncenter alignright | removeformat daomarks | searchreplace fullscreen | daosave',
+      toolbar: 'undo redo | daocopyall daopasteall | blocks | bold italic underline strikethrough | bullist numlist blockquote | link daophoto image table | alignleft aligncenter alignright | removeformat daomarks | searchreplace fullscreen | daosave',
       toolbar_mode: 'sliding', block_formats: 'Абзац=p; Подзаголовок=h2; Малый заголовок=h3',
       height: 760, min_height: window.innerWidth <= 700 ? 480 : 760, max_height: 6000,
       autoresize_bottom_margin: 24, autoresize_overflow_padding: 22, resize: true, elementpath: false,
@@ -110,70 +110,60 @@
         ed.on('remove', () => window.removeEventListener('resize', matchReadingScale));
         ed.on('input change undo redo SetContent', () => { if (ready) { syncBody(); markDirty(); } });
         ed.addShortcut('meta+s', 'Сохранить запись', () => form.querySelector('[name="action"][value="save"]').click());
-        let proofPending = null, proofBusy = false;
-        const proofNodes = container => {
-          const nodes = [];
-          const walk = node => {
-            if (node.nodeType === 1 && ['PRE','CODE','SCRIPT','STYLE','NOSCRIPT'].includes(node.tagName)) return;
-            if (node.nodeType === 3) { if (node.nodeValue.trim() !== '') nodes.push(node); return; }
-            Array.from(node.childNodes).forEach(walk);
+        const pastedTitles = [];
+        ed.on('Undo Redo', () => {
+          const html = ed.getContent(), title = form.elements.title;
+          for (const change of [...pastedTitles].reverse()) {
+            if (html === change.before && title.value === change.afterTitle) { title.value = change.beforeTitle; markDirty(); break; }
+            if (html === change.after && title.value === change.beforeTitle) { title.value = change.afterTitle; markDirty(); break; }
+          }
+        });
+        const pasteFromChat = async () => {
+          let incoming = '';
+          try { incoming = await navigator.clipboard.readText(); } catch (_) { /* Ctrl+V in the dialog works without clipboard permission. */ }
+          const original = ed.getContent(), originalTitle = form.elements.title.value;
+          const firstLine = incoming.replace(/\r\n?/g, '\n').split('\n')[0].replace(/^#{1,6}\s+/, '').replace(/^\*\*(.*?)\*\*$/, '$1').trim();
+          const withTitle = firstLine !== '' && (firstLine === originalTitle.trim() || /^#\s+/.test(incoming));
+          const updatePreview = api => {
+            const preview = document.getElementById('dao-paste-preview');
+            if (preview) preview.innerHTML = window.DaoClipboard.fromText(api.getData().text, api.getData().withTitle).html;
           };
-          walk(container); return nodes;
-        };
-        const showProof = (result, original) => {
-          const patches = result.plan?.patches;
-          if (!Array.isArray(patches)) throw Error('Ответ проверки не распознан. Текст не изменён.');
-          const source = ed.getDoc().createElement('div'); source.innerHTML = original;
-          const nodes = proofNodes(source);
-          for (const patch of patches) if (!Number.isInteger(patch.id) || !nodes[patch.id] || typeof patch.text !== 'string') throw Error('Некорректная правка. Текст не изменён.');
-          const price = Number(result.cost || 0).toFixed(4);
-          if (!patches.length) { ed.windowManager.alert('Явных ошибок не найдено. Стоимость проверки: $' + price); return; }
-          const html = '<p>Проверь изменения перед применением. Стоимость: $' + price + '</p>' + patches.map(p => '<section><p><b>Было:</b><br>' + ed.dom.encode(nodes[p.id].nodeValue).replace(/\n/g, '<br>') + '</p><p><b>Предлагается:</b><br>' + ed.dom.encode(p.text).replace(/\n/g, '<br>') + '</p><hr></section>').join('');
-          ed.windowManager.open({title: 'Проверка текста — ' + patches.length + ' фрагм.', size: 'large',
-            body: {type: 'panel', items: [{type: 'htmlpanel', html}]},
-            buttons: [{type: 'cancel', text: 'Отмена'}, {type: 'submit', text: 'Применить', primary: true}],
-            onSubmit: dialog => {
-              if (ed.getContent() !== original) { ed.windowManager.alert('За время проверки текст изменился. Правки не применены. Запусти новую проверку текущей версии.'); return; }
-              patches.forEach(p => { nodes[p.id].nodeValue = p.text; });
-              ed.undoManager.add();
-              ed.undoManager.transact(() => ed.setContent(source.innerHTML));
-              syncBody(); markDirty(); dialog.close();
+          const dialog = ed.windowManager.open({title: 'Вставить текст из чата', size: 'large',
+            initialData: {text: incoming, withTitle},
+            body: {type: 'panel', items: [
+              {type: 'textarea', name: 'text', label: 'Текст из буфера — можно вставить сюда через Ctrl+V'},
+              {type: 'checkbox', name: 'withTitle', label: 'Первая строка — заголовок'},
+              {type: 'htmlpanel', html: '<p>Пустые строки сохраняют паузы. Жирный и курсив из Markdown сохраняются. Замена применяется только после подтверждения; доступна отмена Ctrl+Z.</p><details open><summary>Предпросмотр</summary><div id="dao-paste-preview"></div></details>'}
+            ]},
+            buttons: [{type: 'cancel', text: 'Отмена'}, {type: 'submit', text: 'Заменить текст', primary: true}],
+            onChange: updatePreview,
+            onSubmit: api => {
+              if (ed.getContent() !== original || form.elements.title.value !== originalTitle) { ed.windowManager.alert('Запись изменилась, пока было открыто окно. Закрой его и вставь текст заново.'); return; }
+              const data = api.getData(), parsed = window.DaoClipboard.fromText(data.text, data.withTitle);
+              if (!parsed.html || (data.withTitle && !parsed.title)) { ed.windowManager.alert('Вставь текст рассказа. Пустой буфер не заменяет запись.'); return; }
+              ed.undoManager.add(); ed.undoManager.transact(() => ed.setContent(parsed.html));
+              if (data.withTitle) { form.elements.title.value = parsed.title; pastedTitles.push({before: original, after: ed.getContent(), beforeTitle: originalTitle, afterTitle: parsed.title}); }
+              syncBody(); markDirty(); api.close();
             }
           });
+          updatePreview(dialog);
         };
-        const runProof = async api => {
-          if (proofBusy) return;
-          proofBusy = true; api.setEnabled(false);
+        ed.ui.registry.addButton('daocopyall', {text: 'Скопировать всё', tooltip: 'Скопировать заголовок и весь текст для работы в чате', onAction: async () => {
+          const html = ed.getContent(), title = form.elements.title.value;
+          const plain = window.DaoClipboard.toText(html, title);
           try {
-            if (!proofPending) {
-              await prepareBody();
-              const original = ed.getContent();
-              const data = new FormData();
-              for (const name of ['csrf','id','revision']) data.set(name, form.elements[name].value);
-              data.set('body', original);
-              status.textContent = 'Запускаю проверку текста…';
-              const response = await fetch('/proofread.php', {method: 'POST', body: data});
-              if (!response.headers.get('content-type')?.includes('application/json')) throw Error('Не удалось начать проверку. Обнови страницу после сохранения текста.');
-              const result = await response.json(); if (!response.ok) throw Error(result.error || 'Проверка не запущена.');
-              proofPending = {job: result.job, original};
-            }
-            const pending = proofPending;
-            for (let attempt = 0; attempt < 120; attempt++) {
-              if (ed.removed) return;
-              const response = await fetch('/proofread.php?job=' + pending.job + '&id=' + encodeURIComponent(form.elements.id.value), {cache: 'no-store'});
-              if (!response.headers.get('content-type')?.includes('application/json')) throw Error('Нет ответа проверки. Нажми «Проверить текст» для получения результата без повторного запроса к ИИ.');
-              const result = await response.json(); if (!response.ok) throw Error(result.error || 'Не удалось получить результат проверки.');
-              if (result.state === 'done') { proofPending = null; status.textContent = 'Проверка готова. Рассказ ещё не изменён.'; showProof(result, pending.original); return; }
-              if (['failed','unknown'].includes(result.state)) { proofPending = null; throw Error(result.error || 'Проверка остановлена. Текст не изменён.'); }
-              if (result.error) { status.textContent = result.error; throw Error(result.error); }
-              status.textContent = 'Корректор проверяет текст. Можно продолжать писать.';
-              await new Promise(resolve => setTimeout(resolve, 5000));
-            }
-            throw Error('Проверка ещё не завершена. Нажми «Проверить текст» позже, чтобы получить результат без нового запроса к ИИ.');
-          } catch (error) { status.textContent = String(error.message || error); ed.windowManager.alert(String(error.message || error)); }
-          finally { proofBusy = false; if (!ed.removed) api.setEnabled(true); }
-        };
-        ed.ui.registry.addButton('daoproofread', {text: 'Проверить текст', tooltip: 'Исправить ошибки и опечатки; сначала показать правки', onAction: runProof});
+            if (window.ClipboardItem && navigator.clipboard?.write) {
+              try { await navigator.clipboard.write([new ClipboardItem({'text/plain': new Blob([plain], {type: 'text/plain'}), 'text/html': new Blob(['<h1>' + ed.dom.encode(title) + '</h1>' + html], {type: 'text/html'})})]); }
+              catch (_) { await navigator.clipboard.writeText(plain); }
+            } else await navigator.clipboard.writeText(plain);
+            status.textContent = 'Заголовок и текст скопированы';
+            const label = ed.getContainer().querySelector('[data-mce-name="daocopyall"] .tox-tbtn__select-label');
+            if (label) { label.textContent = 'Скопировано ✓'; setTimeout(() => { if (label.isConnected) label.textContent = 'Скопировать всё'; }, 2000); }
+          } catch (_) {
+            ed.windowManager.open({title: 'Скопировать текст', size: 'large', initialData: {text: plain}, body: {type: 'panel', items: [{type: 'textarea', name: 'text', label: 'Браузер не разрешил копирование. Выдели текст и нажми Ctrl+C.'}]}, buttons: [{type: 'cancel', text: 'Закрыть'}]});
+          }
+        }});
+        ed.ui.registry.addButton('daopasteall', {text: 'Вставить из буфера', tooltip: 'Вставить готовый текст с предпросмотром перед заменой', onAction: pasteFromChat});
         ed.ui.registry.addButton('daosave', {icon: 'save', tooltip: 'Сохранить запись (Ctrl+S)', onAction: () => form.querySelector('[name="action"][value="save"]').click()});
         ed.ui.registry.addButton('daophoto', {
           icon: 'image', text: 'Фото', tooltip: 'Загрузить фотографию в текст',

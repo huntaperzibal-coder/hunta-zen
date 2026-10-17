@@ -61,18 +61,10 @@ illustration_enqueue(post((int)$db->lastInsertId()),'Тёплый свет');'''
         saved=json.loads(db.execute("SELECT value FROM settings WHERE key='illustrator_probe_result'").fetchone()[0])
         assert saved['state']=='done' and (site/'photos'/saved['image']).is_file(),'diagnostic image delivered'
         assert bridge.call(delivery)['already_saved'],'diagnostic delivery idempotent'
-        # Proofreading uses the same real SSH packet/worker protocol, without an image request.
-        snapshot={'mode':'proofread','title':'Проверка','body_hash':'offline','segments':['Превет, мир!'],'settings':{'reader':'google/gemini-2.5-flash','references':[]}}
-        db.execute("INSERT INTO illustration_jobs(post_id,revision,snapshot,created_at,updated_at) VALUES(1,1,?,datetime('now'),datetime('now'))",[json.dumps(snapshot)])
-        db.commit()
-        proof=bridge.call({'op':'claim'})['job'];proof_base={'id':proof['id'],'lease':proof['lease']}
-        proof_work=pathlib.Path(temp)/'proof-runner';proof_work.mkdir(mode=0o700)
-        proof_result=module.run_packet(proof,proof_work,None,[PHP,str(ROOT/'tests/actions_fixture.php')])
-        assert proof_result['state']=='done' and proof_result['image_b64']=='' and proof_result['plan']['patches'][0]['text']=='Привет, мир!'
-        proof_delivery={**proof_base,'op':'finish',**proof_result}
-        assert bridge.call(proof_delivery)['ok'] and bridge.call(proof_delivery)['already_saved']
-        proof_row=db.execute('SELECT state,image,cost FROM illustration_jobs WHERE id=?',[proof['id']]).fetchone()
-        assert proof_row==('done','',.002),'proofread result delivered without a photo'
-        assert db.execute('SELECT body,cover,revision FROM posts WHERE id=1').fetchone()==('Гена и Винни у костра.','',1),'proofreading never applies edits on server'
+        # Retired proofreading tasks are closed without a provider request.
+        db.execute("INSERT INTO illustration_jobs(post_id,revision,snapshot,created_at,updated_at) VALUES(1,1,?,datetime('now'),datetime('now'))",['{"mode":"proofread","segments":["Old task"]}'])
+        old_proof=db.execute('SELECT max(id) FROM illustration_jobs').fetchone()[0];db.commit()
+        assert bridge.call({'op':'claim'})['job'] is None
+        assert db.execute('SELECT state FROM illustration_jobs WHERE id=?',[old_proof]).fetchone()[0]=='failed'
         db.close()
 print('OK: private snapshot, real offline worker, delivery idempotency, lease authentication, unchanged author text, stale task protection')

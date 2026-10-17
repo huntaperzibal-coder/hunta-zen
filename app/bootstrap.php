@@ -38,4 +38,3 @@ require_once __DIR__ . '/illustrator_ui.php';
 require_once __DIR__ . '/illustrator_remote.php';
 require_once __DIR__ . '/illustrator_runner.php';
 
-require_once __DIR__ . '/proofreader.php';

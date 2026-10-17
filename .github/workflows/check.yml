@@ -19,13 +19,14 @@ jobs:
       - run: php tests/rich_text.php
       - run: php tests/categories.php
       - run: php tests/illustrator.php
-      - run: php tests/proofreader.php
       - run: python3 tests/integration_http.py
       - run: python3 tests/sync.py
       - run: python3 tests/illustrator_install.py
       - run: python3 tests/illustrator_remote.py
       - run: python3 tests/illustrator_actions_install.py
       - run: python3 -m py_compile tools/illustrator_actions.py
+      - run: node --check public/assets/js/editor-clipboard.js
+      - run: node tests/editor_clipboard.cjs
       - run: node --check public/assets/js/editor.js
       - run: node tests/editor_confirm.cjs
       - run: node --check public/assets/js/illustrator.js

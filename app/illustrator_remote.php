@@ -37,6 +37,7 @@ function illustration_bridge(array $request): array {
             return ['ok'=>true];
         }
         if($op==='claim'){
+            illustration_close_obsolete_proofreads();
             $key=illustration_key();if($key==='')throw new RuntimeException('Не задан ключ OpenRouter.');
             $job=$db->query("SELECT * FROM illustration_jobs WHERE state='queued' ORDER BY id LIMIT 1")->fetch();
             if(!$job)return ['ok'=>true,'job'=>null];
@@ -78,7 +79,7 @@ function illustration_bridge(array $request): array {
             $error=mb_substr((string)($request['error']??''),0,2000);$key=illustration_key();if($key!=='')$error=str_replace($key,'[ключ скрыт]',$error);
             $snapshot=json_decode($job['snapshot'],true);
             $proofread=($snapshot['mode']??'')==='proofread';
-            if($proofread && $state==='done')$plan=proofread_validate($plan,$snapshot['segments']);
+            if($proofread){$state='failed';$plan=[];$error='Проверка текста в админке отключена.';}
             $image=$state==='done'&&!$proofread?illustration_store_image((string)($request['image_b64']??'')):'';
             $db->prepare('UPDATE illustration_jobs SET state=?,plan=?,cost=?,error=?,image=?,updated_at=? WHERE id=?')->execute([$state,json_encode($plan,JSON_UNESCAPED_UNICODE|JSON_THROW_ON_ERROR),$cost,$error,$image,now(),$id]);
             audit('illustrator:actions:'.$state,(int)$job['post_id']);
