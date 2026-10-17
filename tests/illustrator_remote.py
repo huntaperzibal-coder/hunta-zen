@@ -15,12 +15,16 @@ $db->exec(file_get_contents(ROOT.'/database.sql'));
 $db->exec("INSERT INTO settings(key,value) VALUES('illustrator_backend','actions')");
 file_put_contents($storage.'/openrouter-key.php',"<?php return 'local-test-secret';");
 $db->prepare('INSERT INTO posts(title,body,slug,created_at,updated_at) VALUES(?,?,?,?,?)')->execute(['Тихий вечер','Гена и Винни у костра.','fire',now(),now()]);
-illustration_enqueue(post((int)$db->lastInsertId()),'Тёплый свет');'''
+$jobId=illustration_enqueue(post((int)$db->lastInsertId()),'Тёплый свет');
+$snapshot=json_decode($db->query('SELECT snapshot FROM illustration_jobs WHERE id='.$jobId)->fetchColumn(),true);
+$snapshot['cycle_memory']=[['post_id'=>42,'title'=>'Ранее в цикле','thought'=>'Не путать уверенность и знание','image'=>'Открытая дверь в стене','style'=>'Импрессионизм']];
+$db->prepare('UPDATE illustration_jobs SET snapshot=? WHERE id=?')->execute([json_encode($snapshot),$jobId]);'''
     subprocess.run([PHP,'-r',code,str(ROOT)],env=env,check=True,capture_output=True)
     bridge=object.__new__(module.Bridge);bridge.command=[PHP,str(ROOT/'tools/illustrator_bridge.php')]
     with mock.patch.dict(os.environ,env):
         packet=bridge.call({'op':'claim'})['job']
         assert packet['snapshot']['text']=='Гена и Винни у костра.' and packet['api_key']=='local-test-secret'
+        assert packet['snapshot']['cycle_memory'][0]['post_id']==42,'SSH claim preserves frozen cycle cards'
         assert bridge.call({'op':'claim'})['job'] is None,'one lease only'
         base={'id':packet['id'],'lease':packet['lease']}
         try:bridge.call({'op':'finish','id':packet['id'],'lease':'wrong','state':'done'});raise AssertionError('wrong lease accepted')
