@@ -38,6 +38,10 @@ with tempfile.TemporaryDirectory(prefix='hunta-http-') as tmp:
             for path in ['/assets/brand/dialogue.svg','/assets/brand/dao-admin.svg','/assets/brand/dialogue-32.png','/assets/brand/dao-admin.ico','/site.webmanifest','/admin.webmanifest','/favicon.ico']:
                 assert request(path)[0]==200,'brand asset '+path
             public_head=request('/')[1]
+            assert 'theme-label' not in public_head and 'theme-icon' not in public_head,'theme toggle has no visible text or emoji'
+            for icon in ['sun','moon']:
+                code,svg,_=request('/assets/icons/'+icon+'.svg');assert code==200 and '<svg' in svg,'copied theme icon served'
+            assert '/assets/js/reader-theme.js?v=2' in public_head and '/assets/css/reader.css?v=8' in public_head,'theme assets cache refreshed'
             assert '/assets/brand/dialogue.svg?v=2' in public_head and '/assets/brand/dao-admin.svg' not in public_head,'separate site identity'
             for path,heading in [('/admin.php?view=settings','Настройки'),('/admin.php?view=telegram','Telegram'),('/admin.php?view=service','Обслуживание')]:
                 code,panel,_=request(path);assert code==200 and heading in panel,'navigation '+path

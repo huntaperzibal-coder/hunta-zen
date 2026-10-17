@@ -12,8 +12,7 @@
     button.hidden = false;
     button.setAttribute('aria-pressed', String(dark));
     button.setAttribute('aria-label', dark ? 'Включить светлую тему' : 'Включить тёмную тему');
-    button.querySelector('.theme-icon').textContent = dark ? '☀' : '☾';
-    button.querySelector('.theme-label').textContent = dark ? 'Светлая' : 'Тёмная';
+    button.title = button.getAttribute('aria-label');
   };
   apply(saved || (preference.matches ? 'dark' : 'light'));
   document.addEventListener('DOMContentLoaded', () => {
