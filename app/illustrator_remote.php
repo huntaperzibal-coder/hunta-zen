@@ -76,7 +76,10 @@ function illustration_bridge(array $request): array {
             $cost=max($cost,(float)$job['cost']);
             if(!$plan && $job['plan'])$plan=json_decode($job['plan'],true)?:[];
             $error=mb_substr((string)($request['error']??''),0,2000);$key=illustration_key();if($key!=='')$error=str_replace($key,'[ключ скрыт]',$error);
-            $image=$state==='done'?illustration_store_image((string)($request['image_b64']??'')):'';
+            $snapshot=json_decode($job['snapshot'],true);
+            $proofread=($snapshot['mode']??'')==='proofread';
+            if($proofread && $state==='done')$plan=proofread_validate($plan,$snapshot['segments']);
+            $image=$state==='done'&&!$proofread?illustration_store_image((string)($request['image_b64']??'')):'';
             $db->prepare('UPDATE illustration_jobs SET state=?,plan=?,cost=?,error=?,image=?,updated_at=? WHERE id=?')->execute([$state,json_encode($plan,JSON_UNESCAPED_UNICODE|JSON_THROW_ON_ERROR),$cost,$error,$image,now(),$id]);
             audit('illustrator:actions:'.$state,(int)$job['post_id']);
         }else throw new RuntimeException('Неизвестная команда.');

@@ -70,8 +70,11 @@ function illustration_enqueue(array $p,string $wishes): int {
     $snapshot=['mode'=>'concept','style_profile'=>$profile,'title'=>$p['title'],'text'=>$text,'wishes'=>$wishes,'settings'=>$s];
     $db->beginTransaction();
     try{
-        $q=$db->prepare("SELECT id FROM illustration_jobs WHERE post_id=? AND state IN ('queued','planning','generating')");$q->execute([$p['id']]);
-        if($existing=$q->fetchColumn()){$db->commit();return (int)$existing;}
+        $q=$db->prepare("SELECT id,snapshot FROM illustration_jobs WHERE post_id=? AND state IN ('queued','planning','generating')");$q->execute([$p['id']]);
+        if($existing=$q->fetch()){
+            if((json_decode($existing['snapshot'],true)['mode']??'')==='proofread')throw new RuntimeException('Сначала дождись проверки текста.');
+            $db->commit();return (int)$existing['id'];
+        }
         $q=$db->prepare('SELECT count(*) FROM illustration_jobs WHERE created_at>=?');$q->execute([date('Y-m-d').' 00:00:00']);
         if((int)$q->fetchColumn()>=$s['daily_limit'])throw new RuntimeException('Дневной лимит иллюстраций исчерпан. Его можно изменить в настройках.');
         $db->prepare('INSERT INTO illustration_jobs(post_id,revision,snapshot,created_at,updated_at) VALUES(?,?,?,?,?)')->execute([$p['id'],$p['revision'],json_encode($snapshot,JSON_UNESCAPED_UNICODE|JSON_THROW_ON_ERROR),now(),now()]);
@@ -92,7 +95,7 @@ function illustration_delete(int $jobId,int $postId): void {
 }
 function illustration_result(int $jobId,int $postId): array {
     global $db;
-    $q=$db->prepare("SELECT * FROM illustration_jobs WHERE id=? AND post_id=? AND state='done'");$q->execute([$jobId,$postId]);
+    $q=$db->prepare("SELECT * FROM illustration_jobs WHERE id=? AND post_id=? AND state='done' AND image<>''");$q->execute([$jobId,$postId]);
     $job=$q->fetch();if(!$job)throw new RuntimeException('Готовая иллюстрация не найдена.');return $job;
 }
 function illustration_apply(array $p,int $jobId,string $kind): array {
@@ -194,6 +197,11 @@ function illustration_run_one(?callable $transport=null): bool {
         $key=illustration_key();if($key==='')throw new RuntimeException('Не задан ключ OpenRouter.');
         $s=json_decode($job['snapshot'],true,512,JSON_THROW_ON_ERROR);$settings=$s['settings'];
         $update->execute(['planning',now(),$job['id']]);
+        if(($s['mode']??'')==='proofread'){
+            $stage='Корректура';$result=proofread_generate($s,$transport,$key);
+            $db->prepare("UPDATE illustration_jobs SET state='done',plan=?,cost=?,updated_at=? WHERE id=?")->execute([json_encode($result['plan'],JSON_UNESCAPED_UNICODE|JSON_THROW_ON_ERROR),$result['cost'],now(),$job['id']]);
+            return true;
+        }
         $stage='Чтение истории ('.$settings['reader'].')';
         $readerOptions=preg_match('~^openai/gpt-(?:5\.6|6|6\.1)-sol(?:-pro)?$~D',$settings['reader'])?['max_tokens'=>12000,'reasoning'=>['effort'=>'medium']]:['max_tokens'=>4000];
         $reader=$transport('chat/completions',[...$readerOptions,'model'=>$settings['reader'],'response_format'=>['type'=>'json_object'],'messages'=>[

@@ -10,7 +10,7 @@ function illustration_editor(array $p): void {
     if(illustration_backend()==='actions')echo '<p class="hint">Обработка: GitHub Actions. Тексты и картинки передаются по SSH.</p><button form="editor" class="btn-secondary" name="action" value="illustration_dispatch">Запустить ожидающую очередь</button> <a href="https://github.com/'.ILLUSTRATOR_REPOSITORY.'/actions/workflows/illustrator.yml" target="_blank" rel="noopener">Состояние в GitHub ↗</a>';
     $heartbeat=is_file($storage.'/illustrator-heartbeat')?(int)file_get_contents($storage.'/illustrator-heartbeat'):0;
     if(illustration_backend()!=='actions' && time()-$heartbeat>180)echo '<p class="hint">Фоновый обработчик ещё не подключён или давно не запускался. Настройка — в разделе «Иллюстратор».</p>';
-    $q=$db->prepare("SELECT * FROM illustration_jobs j WHERE post_id=? AND NOT EXISTS(SELECT 1 FROM settings s WHERE s.key='illustration_deleted:' || j.id) ORDER BY id DESC LIMIT 30");$q->execute([$p['id']]);
+    $q=$db->prepare("SELECT * FROM illustration_jobs j WHERE post_id=? AND snapshot NOT LIKE ? AND NOT EXISTS(SELECT 1 FROM settings s WHERE s.key='illustration_deleted:' || j.id) ORDER BY id DESC LIMIT 30");$q->execute([$p['id'],'{"mode":"proofread",%']);
     $jobs=$q->fetchAll();$active=false;
     echo '<div class="illustration-grid" id="illustration-history" data-post="'.(int)$p['id'].'">';
     foreach($jobs as $job){

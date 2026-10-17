@@ -19,6 +19,7 @@ jobs:
       - run: php tests/rich_text.php
       - run: php tests/categories.php
       - run: php tests/illustrator.php
+      - run: php tests/proofreader.php
       - run: python3 tests/integration_http.py
       - run: python3 tests/sync.py
       - run: python3 tests/illustrator_install.py
