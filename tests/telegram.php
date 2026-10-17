@@ -43,6 +43,7 @@ try{
     foreach($code['entities'] as $e)if($e['type']==='bold')foreach($ranges as $r)tg_assert($e['offset']+$e['length']<=$r['offset'] || $e['offset']>=$r['offset']+$r['length'],'code entities do not overlap bold');
     $richPlan=telegram_plan($p);$richHtml=$richPlan[0]['rich_message']['html'];
     tg_assert(strpos($richHtml,'Так суждено')<strpos($richHtml,'<img ')&&strpos($richHtml,'<img ')<strpos($richHtml,'Название')&&strpos($richHtml,'Название')<strpos($richHtml,'Начало'),'single-message order: series, image, title, full story');
+    tg_assert(str_ends_with($richHtml,'<p><a href="https://example.test/?p=format">🌐 Читать на сайте</a></p>'),'footer has readable site link with standard emoji and exact post URL');
     tg_assert(str_contains($richHtml,'<strong>')&&str_contains($richHtml,'<blockquote>')&&str_contains($richHtml,'https://example.test/one'),'rich body retains formatting and absolute links');
     $oversize=$p;$oversize['telegram_text']=str_repeat('я',32769);tg_fails(fn()=>telegram_plan($oversize),'over-limit rich message rejected before delivery, not truncated');
     $many=$p;$many['body']=DAO_RICH_PREFIX.str_repeat('<p>Мысль</p>',501);tg_fails(fn()=>telegram_plan($many),'too many rich blocks rejected before delivery');

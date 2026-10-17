@@ -131,7 +131,7 @@ function telegram_plan(array $p): array {
     if($photo!=='')$html.='<img src="tg://photo?id=illustration">';
     $html.='<p><b>'.h($p['title']).'</b></p>';
     $html.=trim((string)$p['telegram_text'])!==''?'<p>'.str_replace("\n",'<br>',h(trim($p['telegram_text']))).'</p>':telegram_rich_body($p['body']);
-    $url=rtrim($config['site_url'],'/').'/?p='.rawurlencode($p['slug']);$html.='<p><a href="'.h($url).'">'.h($url).'</a></p>';
+    $url=rtrim($config['site_url'],'/').'/?p='.rawurlencode($p['slug']);$html.='<p><a href="'.h($url).'">🌐 Читать на сайте</a></p>';
     // Reject oversized messages before any network call; never truncate or split implicitly.
     if(mb_strlen(html_entity_decode(strip_tags($html),ENT_QUOTES|ENT_HTML5,'UTF-8'))>32768)throw new RuntimeException('Рассказ больше лимита одного составного сообщения Telegram (32768 символов). Сократи текст для канала.');
     $doc=new DOMDocument('1.0','UTF-8');$previous=libxml_use_internal_errors(true);
