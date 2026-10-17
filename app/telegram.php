@@ -7,6 +7,7 @@ function telegram_document(array $p): array {
     $line=category_public_caption((string)($p['category_slug']??''),'');
     $text=($line!==''?$line."\n\n":'').$p['title']."\n\n";
     $entities=[['type'=>'bold','offset'=>telegram_units($line!==''?$line."\n\n":''),'length'=>telegram_units($p['title'])]];
+    if($line!=='')foreach(['bold','italic'] as $type)$entities[]=['type'=>$type,'offset'=>0,'length'=>telegram_units($line)];
     if(trim((string)$p['telegram_text'])!=='')$text.=trim($p['telegram_text']);
     else {
         $doc=new DOMDocument('1.0','UTF-8');$prev=libxml_use_internal_errors(true);
