@@ -4,10 +4,17 @@ function telegram_units(string $text): int { return intdiv(strlen(mb_convert_enc
 /** Read the article as text plus Telegram entities; offsets are UTF-16, not bytes. */
 function telegram_document(array $p): array {
     global $config;
-    $line=category_public_caption((string)($p['category_slug']??''),'');
+    $slug=(string)($p['category_slug']??'');
+    $caption=category_public_caption($slug,'');
+    $name=category_public_title($slug,'');
+    $icon=match($slug){'vinnie'=>'☯️','gena'=>'⚙️',default=>''};
+    $line=$icon!==''?$icon.' '.$name.' · '.$caption:'';
     $text=($line!==''?$line."\n\n":'').$p['title']."\n\n";
     $entities=[['type'=>'bold','offset'=>telegram_units($line!==''?$line."\n\n":''),'length'=>telegram_units($p['title'])]];
-    if($line!=='')foreach(['bold','italic'] as $type)$entities[]=['type'=>$type,'offset'=>0,'length'=>telegram_units($line)];
+    if($line!==''){
+        $entities[]=['type'=>'bold','offset'=>telegram_units($icon.' '),'length'=>telegram_units($name)];
+        $entities[]=['type'=>'italic','offset'=>telegram_units($icon.' '.$name.' · '),'length'=>telegram_units($caption)];
+    }
     if(trim((string)$p['telegram_text'])!=='')$text.=trim($p['telegram_text']);
     else {
         $doc=new DOMDocument('1.0','UTF-8');$prev=libxml_use_internal_errors(true);
