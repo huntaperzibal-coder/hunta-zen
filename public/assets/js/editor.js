@@ -167,6 +167,8 @@
   setInterval(save, 5000);
   form.addEventListener('submit', event => {
     if (replay) { replay = false; submitting = true; return; }
+    const confirmation = event.submitter?.dataset.confirm;
+    if (confirmation && !window.confirm(confirmation)) { event.preventDefault(); return; }
     event.preventDefault(); pendingSubmit = event.submitter;
     if (busy) status.textContent = 'Завершаю сохранение…';
     else submitPending();

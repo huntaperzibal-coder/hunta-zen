@@ -75,6 +75,12 @@ try{
         verify_illustration($snapshot['style_profile']['id']===$styleId&&$plan['style_profile']['id']===$styleId&&$readerInput['art_direction']===$snapshot['settings']['style']&&str_contains($calls[1][1]['prompt'],$snapshot['settings']['style']),'category palette reaches reader and painter and survives later category change: '.$slug);
     }
     verify_illustration(illustration_style_profile('')===null,'uncategorized posts retain general style');
+    $beforeDelete=post((int)$p['id']);$jobCount=(int)$db->query('SELECT count(*) FROM illustration_jobs')->fetchColumn();
+    expect_illustration_error(fn()=>illustration_delete($styledJob,(int)$p['id']+999));
+    expect_illustration_error(fn()=>illustration_delete($stale,(int)$p['id']));
+    illustration_delete($styledJob,(int)$p['id']);illustration_delete($styledJob,(int)$p['id']);
+    verify_illustration(setting('illustration_deleted:'.$styledJob)!=='' && (int)$db->query('SELECT count(*) FROM illustration_jobs')->fetchColumn()===$jobCount,'delete hides variant idempotently and preserves cost ledger');
+    verify_illustration(post((int)$p['id'])===$beforeDelete && is_file($storage.'/photos/'.$styled['image']),'delete preserves story, cover and image files');
 
 }finally{
     $db=null;

@@ -80,6 +80,16 @@ function illustration_enqueue(array $p,string $wishes): int {
         return $id;
     }catch(Throwable $e){if($db->inTransaction())$db->rollBack();throw $e;}
 }
+function illustration_delete(int $jobId,int $postId): void {
+    global $db;
+    $q=$db->prepare('SELECT state FROM illustration_jobs WHERE id=? AND post_id=?');$q->execute([$jobId,$postId]);
+    $state=$q->fetchColumn();
+    if(!$state)throw new RuntimeException('Вариант иллюстрации не найден.');
+    if(!in_array($state,['done','failed'],true))throw new RuntimeException('Сначала дождись завершения обработки или проверки результата.');
+    // Keep job costs, leases and image files: published stories and queued snapshots may use them.
+    $db->prepare('INSERT OR IGNORE INTO settings(key,value) VALUES(?,?)')->execute(['illustration_deleted:'.$jobId,now()]);
+    audit('illustrator:delete',$postId);
+}
 function illustration_result(int $jobId,int $postId): array {
     global $db;
     $q=$db->prepare("SELECT * FROM illustration_jobs WHERE id=? AND post_id=? AND state='done'");$q->execute([$jobId,$postId]);

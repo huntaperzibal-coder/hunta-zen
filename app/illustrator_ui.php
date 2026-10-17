@@ -10,7 +10,7 @@ function illustration_editor(array $p): void {
     if(illustration_backend()==='actions')echo '<p class="hint">Обработка: GitHub Actions. Тексты и картинки передаются по SSH.</p><button form="editor" class="btn-secondary" name="action" value="illustration_dispatch">Запустить ожидающую очередь</button> <a href="https://github.com/'.ILLUSTRATOR_REPOSITORY.'/actions/workflows/illustrator.yml" target="_blank" rel="noopener">Состояние в GitHub ↗</a>';
     $heartbeat=is_file($storage.'/illustrator-heartbeat')?(int)file_get_contents($storage.'/illustrator-heartbeat'):0;
     if(illustration_backend()!=='actions' && time()-$heartbeat>180)echo '<p class="hint">Фоновый обработчик ещё не подключён или давно не запускался. Настройка — в разделе «Иллюстратор».</p>';
-    $q=$db->prepare('SELECT * FROM illustration_jobs WHERE post_id=? ORDER BY id DESC LIMIT 30');$q->execute([$p['id']]);
+    $q=$db->prepare("SELECT * FROM illustration_jobs j WHERE post_id=? AND NOT EXISTS(SELECT 1 FROM settings s WHERE s.key='illustration_deleted:' || j.id) ORDER BY id DESC LIMIT 30");$q->execute([$p['id']]);
     $jobs=$q->fetchAll();$active=false;
     echo '<div class="illustration-grid" id="illustration-history" data-post="'.(int)$p['id'].'">';
     foreach($jobs as $job){
@@ -26,6 +26,7 @@ function illustration_editor(array $p): void {
             echo '<details><summary>Мысль и визуальный образ</summary><p>'.h(is_string($plan['scene']??null)?$plan['scene']:'').'</p><p>'.h((string)($plan['prompt']??'')).'</p></details>';
         }
         if((float)$job['cost']>0)echo '<p class="hint">Стоимость, сообщённая API: $'.h(number_format((float)$job['cost'],4,'.','')).'</p>';
+        if(in_array($job['state'],['done','failed'],true))echo '<button form="editor" class="btn-secondary" name="action" value="illustration_delete:'.(int)$job['id'].'" data-confirm="Удалить вариант '.(int)$job['id'].' из истории? Если рисунок уже используется в тексте или на обложке, он там останется.">Удалить</button>';
         echo '</article>';
     }
     echo '</div><p id="illustration-progress" role="status" data-active="'.($active?'1':'0').'">'.($active?'Генерация идёт в фоне. Можно продолжать писать; готовый вариант появится здесь.':'').'</p></section><script src="/assets/js/illustrator.js?v=1" defer></script>';

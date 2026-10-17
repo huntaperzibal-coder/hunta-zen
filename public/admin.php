@@ -44,18 +44,23 @@ if ($_SERVER['REQUEST_METHOD']==='POST') {
                 redirect('/admin.php?view=illustrator#probe');
             }
             if ($action==='illustrator_settings') { illustration_save_settings($_POST,$_FILES);illustration_save_github_token((string)($_POST['github_token']??''));redirect('/admin.php?view=illustrator&saved=1'); }
+            if (str_starts_with($action,'illustration_delete:')) {
+                $deleteId=(int)substr($action,strlen('illustration_delete:'));
+                $action='illustration_delete';
+            }
             if (str_starts_with($action,'illustration_cover:') || str_starts_with($action,'illustration_inline:')) {
                 [$applyKind,$applyId]=explode(':',$action,2);
                 // Validate ownership before saving editor content.
                 illustration_result((int)$applyId,(int)($_POST['id']??0));
                 $action='illustration_apply';
             }
-            if (in_array($action,['illustration_dispatch','illustrate','illustration_apply','save','autosave','publish','unpublish','upload','telegram','telegram_schedule','telegram_cancel','resolve'],true)) {
+            if (in_array($action,['illustration_delete','illustration_dispatch','illustrate','illustration_apply','save','autosave','publish','unpublish','upload','telegram','telegram_schedule','telegram_cancel','resolve'],true)) {
                 $id=(int)($_POST['id']??0);
                 $input=$_POST;
                 if ($action==='publish') $input['status']='published';
                 if ($action==='unpublish') $input['status']='draft';
                 $p=save_post($id,$input,$action==='autosave'); $savedRevision=$p['revision'];
+                if ($action==='illustration_delete') illustration_delete($deleteId,$id);
                 if ($action==='illustration_dispatch') illustration_dispatch();
                 if ($action==='illustrate') illustration_enqueue($p,(string)($_POST['illustration_wishes']??''));
                 if ($action==='illustration_apply') { $p=illustration_apply($p,(int)$applyId,$applyKind==='illustration_cover'?'cover':'inline');$savedRevision=$p['revision']; }
@@ -74,7 +79,7 @@ if ($_SERVER['REQUEST_METHOD']==='POST') {
                     telegram_resolve($id,max(0,(int)($_POST['message_id']??0)));
                 }
                 if ($action==='autosave') { header('Content-Type: application/json'); echo json_encode(['revision'=>$p['revision'],'saved'=>date('H:i:s')]);exit; }
-                redirect('/admin.php?view=edit&id='.$id.'&saved=1'.(in_array($action,['illustration_dispatch','illustrate','illustration_apply'],true)?'#illustrations':(in_array($action,['telegram','telegram_schedule','telegram_cancel','resolve'],true)?'#telegram':'' )));
+                redirect('/admin.php?view=edit&id='.$id.'&saved=1'.(in_array($action,['illustration_delete','illustration_dispatch','illustrate','illustration_apply'],true)?'#illustrations':(in_array($action,['telegram','telegram_schedule','telegram_cancel','resolve'],true)?'#telegram':'' )));
             }
             if ($action==='settings') {
                 $title=trim((string)($_POST['title']??''));if ($title==='') throw new RuntimeException('У сайта должно быть название.');
@@ -119,7 +124,7 @@ if ($view==='login') {
         telegram_editor($p,$delivery?:null);
         echo '</form>';
         illustration_editor($p);
-        echo '<script src="/assets/tinymce/tinymce.min.js?v=8.5.0" defer></script><script src="/assets/js/editor.js?v=7" defer></script>';
+        echo '<script src="/assets/tinymce/tinymce.min.js?v=8.5.0" defer></script><script src="/assets/js/editor.js?v=8" defer></script>';
     }
 } elseif ($view==='illustrator') {
     illustration_settings_page();
