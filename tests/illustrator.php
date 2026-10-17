@@ -32,9 +32,10 @@ try{
     $p=save_post((int)$p['id'],['title'=>$p['title'],'body'=>'Новая версия текста','revision'=>$p['revision']]);
     $calls=[];
     $png='iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+j6ioAAAAASUVORK5CYII=';
-    $mock=function(string $path,array $payload,string $key)use(&$calls,$png):array{
+    $chosenStyle='watercolor';
+    $mock=function(string $path,array $payload,string $key)use(&$calls,$png,&$chosenStyle):array{
         $calls[]=[$path,$payload];verify_illustration($key==='local-test-secret','transport receives server key');
-        if($path==='chat/completions')return ['choices'=>[['message'=>['content'=>json_encode(['scene'=>'Вечер у костра','prompt'=>'Two friends by a campfire under stars.','characters'=>['Гена','Винни']])]]],'usage'=>['cost'=>0.001]];
+        if($path==='chat/completions')return ['choices'=>[['message'=>['content'=>json_encode(['style_id'=>$chosenStyle,'style_reason'=>'Техника подчёркивает хрупкость образа','scene'=>'Вечер у костра','prompt'=>'Two friends by a campfire under stars.','characters'=>['Гена','Винни']])]]],'usage'=>['cost'=>0.001]];
         return ['data'=>[['b64_json'=>$png]],'usage'=>['cost'=>0.04]];
     };
     illustration_run_one($mock);$job=illustration_result($id,(int)$p['id']);
@@ -63,7 +64,8 @@ try{
     $refJob=illustration_enqueue($p,'Сохранить внешность');$calls=[];illustration_run_one($mock);
     verify_illustration(!isset($calls[1][1]['input_references'])&&!isset(json_decode($calls[0][1]['messages'][1]['content'],true)['character_bible'])&&!str_contains($calls[1][1]['prompt'],'Союзмультфильм'),'concept illustration omits old character references and character bible');
     verify_illustration(illustration_result($refJob,(int)$p['id'])['state']==='done','reference generation completed');
-    foreach(['vinnie'=>'vinnie-warm-v1','gena'=>'gena-cool-v1'] as $slug=>$styleId){
+    foreach(['vinnie'=>'vinnie-warm-v2','gena'=>'gena-cool-v2'] as $slug=>$styleId){
+        $chosenStyle=$slug==='vinnie'?'bosch':'impressionism';
         $category=category_by_slug($slug);
         $p=save_post((int)$p['id'],['title'=>$p['title'],'body'=>$p['body'],'revision'=>$p['revision'],'category_id'=>$category['id']]);
         $styledJob=illustration_enqueue($p,'Свободная композиция');
@@ -72,12 +74,25 @@ try{
         $calls=[];illustration_run_one($mock);
         $styled=illustration_result($styledJob,(int)$p['id']);$plan=json_decode($styled['plan'],true);
         $readerInput=json_decode($calls[0][1]['messages'][1]['content'],true);
-        verify_illustration($snapshot['style_profile']['id']===$styleId&&$plan['style_profile']['id']===$styleId&&$readerInput['art_direction']===$snapshot['settings']['style']&&str_contains($calls[1][1]['prompt'],$snapshot['settings']['style']),'category palette reaches reader and painter and survives later category change: '.$slug);
+        verify_illustration($snapshot['style_profile']['id']===$styleId&&$plan['style_profile']['id']===$styleId&&$readerInput['art_direction']===$snapshot['settings']['style']&&str_contains($calls[1][1]['prompt'],$snapshot['settings']['style'])&&$plan['art_style']['id']===$chosenStyle&&str_contains($calls[1][1]['prompt'],$snapshot['style_choices'][$chosenStyle]['direction']),'category palette reaches reader and painter and survives later category change: '.$slug);
     }
     verify_illustration($calls[1][1]['aspect_ratio']==='16:9' && str_contains($calls[1][1]['prompt'],'Горизонтальная композиция 16:9') && $calls[1][1]['model']===$snapshot['settings']['painter'],'story illustration requests explicit landscape ratio and retains selected painter');
     verify_illustration(illustration_style_profile('')===null,'uncategorized posts retain general style');
     $simpleInput=json_decode($calls[0][1]['messages'][1]['content'],true);
     verify_illustration(!isset($simpleInput['previous_images']) && !str_contains($calls[0][1]['messages'][0]['content'],'деталь-якорь') && !str_contains($calls[1][1]['prompt'],'Выразительный приём:'),'restored simple reader and painter prompts without history or required anchors');
+    foreach(array_keys(illustration_art_styles()) as $chosenStyle){
+        $styleJob=illustration_enqueue($p,'');$calls=[];illustration_run_one($mock);
+        $stylePlan=json_decode(illustration_result($styleJob,(int)$p['id'])['plan'],true);
+        $styleInput=json_decode($calls[0][1]['messages'][1]['content'],true);
+        verify_illustration(count($calls)===2 && $stylePlan['art_style']['id']===$chosenStyle && $stylePlan['art_style']['title']===illustration_art_styles()[$chosenStyle]['title'] && str_contains($calls[1][1]['prompt'],illustration_art_styles()[$chosenStyle]['direction']) && isset($styleInput['style_choices'][$chosenStyle]),'reader choice reaches painter and saved card with two calls: '.$chosenStyle);
+    }
+    $badStyleJob=illustration_enqueue($p,'');$calls=[];$chosenStyle='not-in-catalog';illustration_run_one($mock);
+    verify_illustration(count($calls)===1 && $db->query('SELECT state FROM illustration_jobs WHERE id='.$badStyleJob)->fetchColumn()==='failed','unknown style stops before painter without retry');
+    $chosenStyle='watercolor';$legacyJob=illustration_enqueue($p,'');
+    $legacySnapshot=json_decode($db->query('SELECT snapshot FROM illustration_jobs WHERE id='.$legacyJob)->fetchColumn(),true);unset($legacySnapshot['style_choices']);
+    $db->prepare('UPDATE illustration_jobs SET snapshot=? WHERE id=?')->execute([json_encode($legacySnapshot),$legacyJob]);
+    $calls=[];illustration_run_one(function($path,$payload,$key)use($mock){$r=$mock($path,$payload,$key);if($path==='chat/completions'){$plan=json_decode($r['choices'][0]['message']['content'],true);unset($plan['style_id'],$plan['style_reason']);$r['choices'][0]['message']['content']=json_encode($plan);}return $r;});
+    verify_illustration(illustration_result($legacyJob,(int)$p['id'])['state']==='done' && !isset(json_decode($calls[0][1]['messages'][1]['content'],true)['style_choices']),'pre-update queue remains compatible without a style choice');
     $beforeDelete=post((int)$p['id']);$jobCount=(int)$db->query('SELECT count(*) FROM illustration_jobs')->fetchColumn();
     expect_illustration_error(fn()=>illustration_delete($styledJob,(int)$p['id']+999));
     expect_illustration_error(fn()=>illustration_delete($stale,(int)$p['id']));

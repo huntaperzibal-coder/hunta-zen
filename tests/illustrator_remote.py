@@ -28,6 +28,7 @@ illustration_enqueue(post((int)$db->lastInsertId()),'Тёплый свет');'''
         work=pathlib.Path(temp)/'runner';work.mkdir(mode=0o700)
         result=module.run_packet(packet,work,lambda progress:bridge.call({**base,'op':'progress',**progress}),[PHP,str(ROOT/'tests/actions_fixture.php')])
         assert result['state']=='done' and abs(result['cost']-.041)<.000001
+        assert result['plan']['art_style']['id']=='impressionism','Actions preserves the automatic style choice'
         finish={**base,'op':'finish',**result}
         assert bridge.call(finish)['ok']
         assert bridge.call(finish)['already_saved'],'delivery idempotent'
