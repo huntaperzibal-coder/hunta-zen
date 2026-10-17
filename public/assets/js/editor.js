@@ -165,11 +165,13 @@
     finally { busy = false; if (pendingSubmit && !stopped) submitPending(); }
   }
   setInterval(save, 5000);
-  form.addEventListener('submit', event => {
+  form.addEventListener('submit', async event => {
     if (replay) { replay = false; submitting = true; return; }
-    const confirmation = event.submitter?.dataset.confirm;
-    if (confirmation && !window.confirm(confirmation)) { event.preventDefault(); return; }
-    event.preventDefault(); pendingSubmit = event.submitter;
+    event.preventDefault();
+    const button = event.submitter;
+    const confirmation = button?.dataset.editorConfirm;
+    if (confirmation && !await window.ordaConfirm(confirmation, 'Удалить', 'Отмена')) return;
+    pendingSubmit = button;
     if (busy) status.textContent = 'Завершаю сохранение…';
     else submitPending();
   });

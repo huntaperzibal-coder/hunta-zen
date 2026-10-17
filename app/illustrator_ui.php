@@ -27,7 +27,7 @@ function illustration_editor(array $p): void {
             echo '<details><summary>Мысль и визуальный образ</summary><p>'.h(is_string($plan['scene']??null)?$plan['scene']:'').'</p><p>'.h((string)($plan['prompt']??'')).'</p></details>';
         }
         if((float)$job['cost']>0)echo '<p class="hint">Стоимость, сообщённая API: $'.h(number_format((float)$job['cost'],4,'.','')).'</p>';
-        if(in_array($job['state'],['done','failed'],true))echo '<button form="editor" class="btn-secondary" name="action" value="illustration_delete:'.(int)$job['id'].'" data-confirm="Удалить вариант '.(int)$job['id'].' из истории? Если рисунок уже используется в тексте или на обложке, он там останется.">Удалить</button>';
+        if(in_array($job['state'],['done','failed'],true))echo '<button form="editor" class="btn-secondary" name="action" value="illustration_delete:'.(int)$job['id'].'" data-editor-confirm="Удалить вариант '.(int)$job['id'].' из истории? Если рисунок уже используется в тексте или на обложке, он там останется.">Удалить</button>';
         echo '</article>';
     }
     echo '</div><p id="illustration-progress" role="status" data-active="'.($active?'1':'0').'">'.($active?'Генерация идёт в фоне. Можно продолжать писать; готовый вариант появится здесь.':'').'</p></section><script src="/assets/js/illustrator.js?v=1" defer></script>';
