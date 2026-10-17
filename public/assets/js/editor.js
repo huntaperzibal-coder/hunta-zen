@@ -53,7 +53,7 @@
       language: 'ru', language_url: '/assets/tinymce/langs/ru.js',
       plugins: 'autoresize lists advlist autolink link image fullscreen searchreplace wordcount code table charmap',
       menubar: false, promotion: false, branding: false,
-      toolbar: 'undo redo | daocopyall daopasteall | blocks | bold italic underline strikethrough | bullist numlist blockquote | link daophoto image table | alignleft aligncenter alignright | removeformat daomarks | searchreplace fullscreen | daosave',
+      toolbar: 'undo redo | daocopyall daopasteall | blocks daolinebreak | bold italic underline strikethrough | bullist numlist blockquote | link daophoto image table | alignleft aligncenter alignright | removeformat daomarks | searchreplace fullscreen | daosave',
       toolbar_mode: 'sliding', block_formats: 'Абзац=p; Подзаголовок=h2; Малый заголовок=h3',
       height: 760, min_height: window.innerWidth <= 700 ? 480 : 760, max_height: 6000,
       autoresize_bottom_margin: 24, autoresize_overflow_padding: 22, resize: true, elementpath: false,
@@ -80,6 +80,7 @@
           const body = ed.getBody();
           if (!body) return;
           ed.undoManager.ignore(() => {
+            const bookmark = ed.selection.getBookmark();
             body.querySelectorAll('.dao-break-mark').forEach(mark => mark.remove());
             if (body.classList.contains('dao-show-marks')) body.querySelectorAll('br:not([data-mce-bogus])').forEach(br => {
               const mark = ed.getDoc().createElement('span');
@@ -87,9 +88,18 @@
               mark.contentEditable = 'false'; mark.setAttribute('aria-hidden', 'true'); mark.textContent = '↵';
               br.before(mark);
             });
+            ed.selection.moveToBookmark(bookmark);
           });
         };
         ed.on('input SetContent Undo Redo', refreshMarks);
+        ed.ui.registry.addButton('daolinebreak', {
+          text: '↵ Перенос строки', tooltip: 'Новая строка без нового абзаца (Shift+Enter)',
+          onAction: () => {
+            ed.focus();
+            ed.undoManager.transact(() => ed.execCommand('InsertLineBreak'));
+            refreshMarks(); syncBody(); markDirty();
+          }
+        });
         ed.ui.registry.addToggleButton('daomarks', {
           text: '¶', tooltip: 'Разметка: ¶ — абзац (Enter), ↵ — перенос (Shift+Enter). Рамка показывает границы абзаца.',
           onAction: api => {
