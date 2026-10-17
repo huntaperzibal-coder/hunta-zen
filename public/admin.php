@@ -4,6 +4,7 @@ require dirname(__DIR__).'/app/bootstrap.php';
 header('Cache-Control: no-store'); header('X-Robots-Tag: noindex, nofollow');
 session_open();
 $action=(string)($_POST['action']??''); $view=(string)($_GET['view']??'list'); $error=''; $unsaved=null; $savedRevision=null;
+$telegramInline=in_array($action,['telegram_schedule','telegram_cancel'],true) && ($_POST['telegram_inline']??'')==='1';
 if ($_SERVER['REQUEST_METHOD']==='POST') {
     verify_csrf();
     if ($action==='login') {
@@ -73,10 +74,15 @@ if ($_SERVER['REQUEST_METHOD']==='POST') {
                 }
                 if ($action==='telegram') { telegram_cancel_schedule($id);telegram_send($id); }
                 if ($action==='telegram_schedule') telegram_schedule_post($id,(string)($_POST['telegram_due']??''));
-                if ($action==='telegram_cancel') telegram_cancel_schedule($id);
+                if ($action==='telegram_cancel') $cancelledCount=telegram_cancel_schedule($id);
                 if ($action==='resolve') {
                     if (empty($_POST['checked_channel'])) throw new RuntimeException('Сначала проверь результат в Telegram-канале.');
                     telegram_resolve($id,max(0,(int)($_POST['message_id']??0)));
+                }
+                if ($telegramInline) {
+                    $p=post($id);$q=$db->prepare('SELECT * FROM telegram_deliveries WHERE post_id=? AND channel=?');$q->execute([$id,$config['telegram_channel']]);
+                    ob_start();telegram_editor($p,$q->fetch()?:null);$html=ob_get_clean();
+                    header('Content-Type: application/json');echo json_encode(['revision'=>$p['revision'],'html'=>$html,'message'=>$action==='telegram_cancel'?($cancelledCount>0?'Ожидающая отправка отменена.':'Ожидающей отправки уже нет. Состояние обновлено ниже.'):'Отправка запланирована на '.date('d.m.Y H:i',DateTimeImmutable::createFromFormat('!Y-m-d\TH:i',$_POST['telegram_due'],new DateTimeZone('Asia/Novosibirsk'))->getTimestamp()).' (UTC+7).'],JSON_UNESCAPED_UNICODE|JSON_THROW_ON_ERROR);exit;
                 }
                 if ($action==='autosave') { header('Content-Type: application/json'); echo json_encode(['revision'=>$p['revision'],'saved'=>date('H:i:s')]);exit; }
                 redirect('/admin.php?view=edit&id='.$id.'&saved=1'.(in_array($action,['illustration_delete','illustration_dispatch','illustrate','illustration_apply'],true)?'#illustrations':(in_array($action,['telegram','telegram_schedule','telegram_cancel','resolve'],true)?'#telegram':'' )));
@@ -93,6 +99,7 @@ if ($_SERVER['REQUEST_METHOD']==='POST') {
         } catch (Throwable $e) {
             if ($db->inTransaction()) $db->rollBack();
             $error=$e instanceof RuntimeException?$e->getMessage():'Не удалось выполнить действие. Текст сохранён в форме; скопируй его перед обновлением страницы.';
+            if ($telegramInline) { http_response_code(409);header('Content-Type: application/json');echo json_encode(['error'=>$error,'revision'=>$savedRevision],JSON_UNESCAPED_UNICODE|JSON_THROW_ON_ERROR);exit; }
             if ($action==='autosave') { http_response_code(409); header('Content-Type: application/json');echo json_encode(['error'=>$error]);exit; }
             if (isset($id)) { $view='edit'; $_GET['id']=$id; $unsaved=$_POST; $unsaved['revision']=$savedRevision ?? ($_POST['revision']??0); }
         }
@@ -124,7 +131,7 @@ if ($view==='login') {
         telegram_editor($p,$delivery?:null);
         echo '</form>';
         illustration_editor($p);
-        echo '<script src="/assets/tinymce/tinymce.min.js?v=8.5.0" defer></script><script src="/assets/js/editor-clipboard.js?v=1" defer></script><script src="/assets/js/editor.js?v=12" defer></script>';
+        echo '<script src="/assets/tinymce/tinymce.min.js?v=8.5.0" defer></script><script src="/assets/js/editor-clipboard.js?v=1" defer></script><script src="/assets/js/editor.js?v=13" defer></script>';
     }
 } elseif ($view==='illustrator') {
     illustration_settings_page();

@@ -49,7 +49,7 @@ with tempfile.TemporaryDirectory(prefix='hunta-http-') as tmp:
             anonymous=urllib.request.build_opener()
             assert 'Очень личный черновик' not in request('/',opener=anonymous)[1],'draft hidden'
             assert request('/?p=istoriya-script-x-script',opener=anonymous)[0]==404
-            assert '/assets/js/editor-clipboard.js?v=1' in html and '/assets/js/editor.js?v=12' in html,'clipboard helper loads before editor'
+            assert '/assets/js/editor-clipboard.js?v=1' in html and '/assets/js/editor.js?v=13' in html,'clipboard helper loads before editor'
             assert html.index('/assets/js/editor-clipboard.js') < html.index('/assets/js/editor.js'),'clipboard script order'
             assert request('/proofread.php')[0]==404,'retired proofreading endpoint is unavailable'
             # Cover upload also saves the article; private photo must stay private.
@@ -120,6 +120,28 @@ with tempfile.TemporaryDirectory(prefix='hunta-http-') as tmp:
                 records.execute("UPDATE telegram_schedule SET state='cancelled' WHERE post_id=?",[pid]);records.commit()
                 assert 'Обновление запланировано' not in request('/admin.php')[1]
             assert 'tg-list-status' not in request('/',opener=anonymous)[1],'delivery markers remain private'
+            # Schedule and cancel in place; no Telegram calls or real bot token.
+            (storage/'telegram-connection.php').write_text("<?php return ['telegram_token'=>'123456:"+'x'*35+"','telegram_channel'=>'-100100'];")
+            _,edit,_=request('/admin.php?view=edit&id='+pid)
+            current_revision=re.search(r'name="revision" value="(\d+)"',edit)[1]
+            schedule={**data,'action':'telegram_schedule','revision':current_revision,'telegram_inline':'1','telegram_due':time.strftime('%Y-%m-%dT%H:%M',time.gmtime(time.time()+8*3600))}
+            assert request('/admin.php',{**schedule,'csrf':'wrong'})[0]==403,'inline scheduling needs CSRF'
+            code,result,url=request('/admin.php',schedule);assert code==200,result
+            inline=json.loads(result);assert '#telegram' not in url and 'html' in inline and 'Отправка запланирована' in inline['message'],'JSON scheduling returns in place, no redirect'
+            assert 'Текущая отложенная отправка' in inline['html'] and 'Отменить эту отправку' in inline['html'],'cancel belongs to a clearly labelled current task'
+            assert 'Текст на сайте и уже отправленные сообщения сохраняются' in inline['html'],'cancel scope explained'
+            _,panel,_=request('/admin.php?view=edit&id='+pid)
+            assert 'name="telegram_due" value="'+schedule['telegram_due']+'"' in panel,'scheduled time shown in input'
+            stale=request('/admin.php',{**schedule,'revision':current_revision})
+            assert stale[0]==409 and json.loads(stale[1])['revision'] is None,'stale AJAX scheduling cannot overwrite author changes'
+            cancel={**schedule,'action':'telegram_cancel','revision':inline['revision']}
+            code,result,_=request('/admin.php',cancel);assert code==200,result
+            cancelled=json.loads(result);assert 'Ожидающая отправка отменена' in cancelled['message'] and 'Отложенной отправки нет' in cancelled['html']
+            code,again,_=request('/admin.php',{**cancel,'revision':cancelled['revision']});assert code==200
+            assert 'Ожидающей отправки уже нет' in json.loads(again)['message'],'late cancellation does not claim a completed task was cancelled'
+            history=cancelled['html'].split('class="tg-schedule-history"',1)[1]
+            assert history.startswith('><summary>') and '<details class="tg-schedule-history" open' not in cancelled['html'],'past attempts collapsed separately'
+            assert 'не дополнительные публикации в очереди' in history and 'Отменить эту отправку' not in history,'old history has no cancel controls'
             subprocess.run([PHP,str(ROOT/'tools/backup.php')],env=env,check=True,capture_output=True)
             copies=list((storage/'backups').iterdir());assert len(copies)==1 and (copies[0]/'photos'/photo).exists(),'backup photos'
             print('OK: HTTP login, CSRF, drafts, upload, private media, publishing, XSS, conflicts, backup')

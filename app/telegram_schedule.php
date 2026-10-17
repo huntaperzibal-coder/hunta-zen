@@ -38,14 +38,14 @@ function telegram_schedule_post(int $id,string $value): void {
         $db->commit();audit('telegram:scheduled',$id);
     }catch(Throwable $e){if($db->inTransaction())$db->rollBack();throw $e;}
 }
-function telegram_cancel_schedule(int $id): void {
+function telegram_cancel_schedule(int $id): int {
     global $db;
     // Cancel by post across channels so changing the connection cannot conceal a pending task.
     $db->beginTransaction();
     try{
         $q=$db->prepare("SELECT 1 FROM telegram_schedule WHERE post_id=? AND state='running'");$q->execute([$id]);if($q->fetchColumn())throw new RuntimeException('Отправка уже началась. Проверь канал.');
-        $db->prepare("UPDATE telegram_schedule SET state='cancelled',updated_at=? WHERE post_id=? AND state='scheduled'")->execute([now(),$id]);
-        $db->commit();audit('telegram:schedule-cancelled',$id);
+        $cancel=$db->prepare("UPDATE telegram_schedule SET state='cancelled',updated_at=? WHERE post_id=? AND state='scheduled'");$cancel->execute([now(),$id]);$count=$cancel->rowCount();
+        $db->commit();audit('telegram:schedule-cancelled',$id);return $count;
     }catch(Throwable $e){if($db->inTransaction())$db->rollBack();throw $e;}
 
 }

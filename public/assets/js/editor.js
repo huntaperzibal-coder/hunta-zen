@@ -172,11 +172,48 @@
   form.addEventListener('input', event => {
     if (event.target.matches('[name=title],[name=body],[name=excerpt],[name=telegram_text],[name=category_id]')) markDirty();
   });
+  async function updateTelegram(button) {
+    const before = snapshot(), data = new FormData(form);
+    data.delete('photo'); data.set('action', button.value); data.set('telegram_inline', '1');
+    const block = document.querySelector('#telegram');
+    const controls = [...block.querySelectorAll('button,input,textarea')];
+    const previousDisabled = controls.map(control => control.disabled);
+    controls.forEach(control => { control.disabled = true; });
+    const feedback = block.querySelector('#telegram-feedback');
+    feedback.textContent = button.value === 'telegram_cancel' ? 'Отменяю отправку…' : 'Планирую отправку…';
+    feedback.setAttribute('role', 'status');
+    try {
+      let response;
+      try { response = await fetch('/admin.php', {method: 'POST', body: data, headers: {'Accept': 'application/json'}}); }
+      catch (_) { stopped = true; throw Error('Связь прервалась. Обнови страницу и проверь, изменилось ли расписание.'); }
+      if (!response.headers.get('content-type')?.includes('application/json')) { stopped = true; throw Error('Не удалось подтвердить действие. Обнови страницу и проверь расписание.'); }
+      const result = await response.json();
+      if (result.revision) form.elements.revision.value = result.revision;
+      if (!response.ok) { if (!result.revision) stopped = true; throw Error(result.error || 'Не удалось изменить расписание'); }
+      if (!result.html) throw Error('Нет подтверждения расписания. Обнови страницу и проверь результат.');
+      const top = block.getBoundingClientRect().top;
+      block.outerHTML = result.html;
+      const replacement = document.querySelector('#telegram'); replacement.open = true;
+      const message = replacement.querySelector('#telegram-feedback'); message.textContent = result.message;
+      const delta = replacement.getBoundingClientRect().top - top;
+      const scroller = document.querySelector('.orda-shell .main');
+      if (scroller) scroller.scrollTop += delta; else window.scrollBy(0, delta);
+      dirty = before !== snapshot();
+      status.textContent = dirty ? 'Есть новые изменения' : 'Текст сохранён';
+    } catch (error) {
+      const message = String(error.message || error);
+      feedback.textContent = message; feedback.setAttribute('role', 'alert');
+      status.textContent = message;
+    } finally {
+      controls.forEach((control, index) => { control.disabled = previousDisabled[index]; });
+    }
+  }
   async function submitPending() {
     if (busy || !pendingSubmit) return;
     const button = pendingSubmit; pendingSubmit = null; busy = true;
     try {
       await prepareBody();
+      if (['telegram_schedule', 'telegram_cancel'].includes(button.value)) { await updateTelegram(button); busy = false; if (pendingSubmit && !stopped) submitPending(); return; }
       // Leave the original submit event before replaying it. Browsers ignore
       // requestSubmit during that event when uploadImages resolves immediately.
       setTimeout(() => { replay = true; busy = false; form.requestSubmit(button); }, 0);

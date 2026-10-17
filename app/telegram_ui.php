@@ -25,18 +25,30 @@ function telegram_list_indicator(array $row): string {
 function telegram_editor(array $p,?array $delivery): void {
     global $db,$config;
     $channel=(string)($config['telegram_channel']??'');
-    echo '<details id="telegram"><summary>Публикация в Telegram</summary><p class="hint">Канал: <strong>'.h($config['telegram_channel_title']??($channel?:'не подключён')).'</strong> · <a href="/admin.php?view=telegram">Подключение и очередь</a></p><p class="hint">'.h(telegram_status_label((string)($delivery['state']??''))).'. Полный текст и ссылка на блог. Иллюстрация загружается отдельно от предпросмотра ссылки. Всё в одном сообщении: подпись серии → иллюстрация → заголовок и полный рассказ → ссылка на блог.</p><label>Другой текст для канала (необязательно)<textarea class="user-input" name="telegram_text" rows="4" placeholder="Оставь пустым — отправится рассказ целиком с форматированием">'.h($p['telegram_text']).'</textarea></label><p class="hint">Отдельный текст отправляется без форматирования. Основной рассказ сохраняет форматирование. Лимит одного составного сообщения — 32768 символов и 500 блоков. Старый фотопост при обновлении заменяется новым сообщением; прежнее удаляется только после подтверждения отправки. Превью ниже соответствует последнему сохранению.</p><details><summary>Посмотреть полный текст отправки</summary><pre class="tg-preview">'.h(telegram_text($p)).'</pre></details>';
+    $q=$db->prepare("SELECT * FROM telegram_schedule WHERE post_id=? AND state IN ('scheduled','running') ORDER BY id DESC");$q->execute([$p['id']]);$pending=$q->fetchAll();
+    $running=false;foreach($pending as $job)if($job['state']==='running')$running=true;
+    $q=$db->prepare("SELECT * FROM telegram_schedule WHERE post_id=? AND state NOT IN ('scheduled','running') ORDER BY id DESC LIMIT 5");$q->execute([$p['id']]);$history=$q->fetchAll();
+    $due=date('Y-m-d\TH:i',time()+3600);
+    foreach($pending as $job)if($job['channel']===$channel){$due=date('Y-m-d\TH:i',(int)$job['due_at']);break;}
+    echo '<details id="telegram"><summary>Публикация в Telegram</summary><p class="hint">Канал: <strong>'.h($config['telegram_channel_title']??($channel?:'не подключён')).'</strong> · <a href="/admin.php?view=telegram">Подключение и очередь</a></p><p><strong>В канале: '.h(($delivery['state']??'')==='sent'?'размещено':telegram_status_label((string)($delivery['state']??''))).'</strong></p><p id="telegram-feedback" role="status" aria-live="polite"></p>';
+    if($pending){
+        echo '<div class="tg-schedule-current"><strong>Текущая отложенная отправка</strong>';
+        foreach($pending as $job)echo '<p>'.($job['state']==='running'?'Отправляется':'Ожидает отправки').' · <strong>'.h(date('d.m.Y H:i',(int)$job['due_at'])).'</strong> (UTC+7)'.($job['channel']!==$channel?'<br><span class="hint">В ранее выбранный канал: '.h($job['channel']).'</span>':'').'</p>';
+        if(!$running)echo '<button type="submit" class="btn-secondary" name="action" value="telegram_cancel">'.(count($pending)>1?'Отменить все ожидающие отправки этого поста':'Отменить эту отправку').'</button><p class="hint">Снимает этот пост с расписания. Текст на сайте и уже отправленные сообщения сохраняются.</p>';
+        else echo '<p class="hint">Обработчик уже начал отправку. Дождись результата.</p>';
+        echo '</div>';
+    }else echo '<p class="hint tg-schedule-empty">Отложенной отправки нет.</p>';
+    echo '<label>Другой текст для канала (необязательно)<textarea class="user-input" name="telegram_text" rows="4" placeholder="Оставь пустым — отправится рассказ целиком с форматированием">'.h($p['telegram_text']).'</textarea></label><details><summary>Посмотреть текст отправки</summary><pre class="tg-preview">'.h(telegram_text($p)).'</pre></details>';
     if($delivery && in_array($delivery['state'],['unknown','sending'],true)){
-        $q=$db->prepare("SELECT kind,ordinal,operation FROM telegram_parts WHERE post_id=? AND channel=? AND state='sending' LIMIT 1");$q->execute([$p['id'],$channel]);$part=$q->fetch();
-        if($part)echo '<p>Проверь '.($part['kind']==='photo'?'сообщение с иллюстрацией':'текстовую часть № '.((int)$part['ordinal']+1)).($part['operation']==='delete'?' — запрос на удаление':'').'.</p>';
-        echo '<label><input type="checkbox" name="checked_channel" value="1"> Я проверил канал</label><label>Номер этого сообщения из ссылки; 0, если его нет<input class="user-input" type="number" name="message_id" min="0" value="0"></label><button class="btn-secondary" name="action" value="resolve">Сохранить результат проверки</button>';
+        echo '<p class="hint">Проверь, появилось ли сообщение в канале. До проверки повторная отправка остановлена.</p><label><input type="checkbox" name="checked_channel" value="1"> Я проверил канал</label><label>Номер сообщения из ссылки; 0, если его нет<input class="user-input" type="number" name="message_id" min="0" value="0"></label><button class="btn-secondary" name="action" value="resolve">Сохранить результат проверки</button>';
     }else{
-        echo '<button type="submit" class="btn-main" name="action" value="telegram"'.($p['status']!=='published'?' disabled':'').'>'.(($delivery['state']??'')==='sent'?'Обновить публикацию в Telegram':'Отправить в Telegram сейчас').'</button><p class="hint">Публикация на сайте ничего не отправляет в канал. Отправка сейчас отменит ожидающую отложенную отправку этой записи.</p><label>Отложить до (Новосибирск, UTC+7)<input class="user-input" type="datetime-local" name="telegram_due" value="'.h(date('Y-m-d\TH:i',time()+3600)).'"></label><button class="btn-secondary" name="action" value="telegram_schedule"'.($p['status']!=='published'?' disabled':'').'>Запланировать отправку</button><p class="hint">Сохраняется текущая версия рассказа и выбранный канал. После правок нажми «Запланировать» заново. Возврат записи в черновики остановит отправку. Время исполнения зависит от запуска обработчика.</p>';
+        $disabled=$p['status']!=='published'||$running?' disabled':'';
+        echo '<div class="tg-schedule-controls"><label>Дата и время отправки (Новосибирск, UTC+7)<input class="user-input" type="datetime-local" name="telegram_due" value="'.h($due).'"'.$disabled.'></label><button type="submit" class="btn-main" name="action" value="telegram_schedule"'.$disabled.'>'.($pending?'Обновить отложенную отправку':'Запланировать отправку').'</button><p class="hint">Отправится сохранённая сейчас версия текста. Чтобы учесть новые правки или изменить время, обнови отложенную отправку.</p></div><details><summary>Отправить сейчас</summary><button type="submit" class="btn-secondary" name="action" value="telegram"'.$disabled.'>'.(($delivery['state']??'')==='sent'?'Обновить публикацию в Telegram сейчас':'Отправить в Telegram сейчас').'</button><p class="hint">Сразу отправит этот пост и отменит его ожидающую отправку по расписанию.</p></details>';
     }
-    $q=$db->prepare('SELECT * FROM telegram_schedule WHERE post_id=? ORDER BY id DESC LIMIT 3');$q->execute([$p['id']]);
-    foreach($q->fetchAll() as $job){
-        echo '<p>'.h(telegram_status_label($job['state'])).' · '.h(date('d.m.Y H:i',(int)$job['due_at'])).' (UTC+7) · канал '.h($job['channel']).($job['error']!==''?'<br>'.h($job['error']):'').'</p>';
-        if($job['state']==='scheduled')echo '<button class="btn-secondary" name="action" value="telegram_cancel">Отменить отложенную отправку</button>';
+    if($history){
+        echo '<details class="tg-schedule-history"><summary>История отправок — последние '.count($history).'</summary><p class="hint">Это прошлые задачи этого же поста, а не дополнительные публикации в очереди.</p><ul>';
+        foreach($history as $job)echo '<li><strong>'.h(telegram_status_label($job['state'])).'</strong> · '.h(date('d.m.Y H:i',(int)$job['due_at'])).($job['error']!==''?'<br><span class="hint">'.h($job['error']).'</span>':'').'</li>';
+        echo '</ul></details>';
     }
     echo '</details>';
 }
