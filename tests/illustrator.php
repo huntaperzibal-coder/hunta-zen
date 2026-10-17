@@ -34,7 +34,7 @@ try{
     $png='iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+j6ioAAAAASUVORK5CYII=';
     $mock=function(string $path,array $payload,string $key)use(&$calls,$png):array{
         $calls[]=[$path,$payload];verify_illustration($key==='local-test-secret','transport receives server key');
-        if($path==='chat/completions')return ['choices'=>[['message'=>['content'=>json_encode(['conflict'=>'Обещанное тепло не для всех','composition'=>'Общий огонь и один исключённый уголёк','device'=>'ирония','anchor'=>'Один холодный уголёк среди пламени','anchor_reason'=>'Нарушает обещание общего тепла','scene'=>'Вечер у костра','prompt'=>'Two friends by a campfire under stars.','characters'=>['Гена','Винни']])]]],'usage'=>['cost'=>0.001]];
+        if($path==='chat/completions')return ['choices'=>[['message'=>['content'=>json_encode(['scene'=>'Вечер у костра','prompt'=>'Two friends by a campfire under stars.','characters'=>['Гена','Винни']])]]],'usage'=>['cost'=>0.001]];
         return ['data'=>[['b64_json'=>$png]],'usage'=>['cost'=>0.04]];
     };
     illustration_run_one($mock);$job=illustration_result($id,(int)$p['id']);
@@ -63,7 +63,6 @@ try{
     $refJob=illustration_enqueue($p,'Сохранить внешность');$calls=[];illustration_run_one($mock);
     verify_illustration(!isset($calls[1][1]['input_references'])&&!isset(json_decode($calls[0][1]['messages'][1]['content'],true)['character_bible'])&&!str_contains($calls[1][1]['prompt'],'Союзмультфильм'),'concept illustration omits old character references and character bible');
     verify_illustration(illustration_result($refJob,(int)$p['id'])['state']==='done','reference generation completed');
-    verify_illustration(str_contains($calls[1][1]['prompt'],'Один холодный уголёк среди пламени') && str_contains($calls[1][1]['prompt'],'Нарушает обещание общего тепла'),'painter receives selected device, anchor and its meaning');
     foreach(['vinnie'=>'vinnie-warm-v1','gena'=>'gena-cool-v1'] as $slug=>$styleId){
         $category=category_by_slug($slug);
         $p=save_post((int)$p['id'],['title'=>$p['title'],'body'=>$p['body'],'revision'=>$p['revision'],'category_id'=>$category['id']]);
@@ -76,18 +75,8 @@ try{
         verify_illustration($snapshot['style_profile']['id']===$styleId&&$plan['style_profile']['id']===$styleId&&$readerInput['art_direction']===$snapshot['settings']['style']&&str_contains($calls[1][1]['prompt'],$snapshot['settings']['style']),'category palette reaches reader and painter and survives later category change: '.$slug);
     }
     verify_illustration(illustration_style_profile('')===null,'uncategorized posts retain general style');
-    $sceneJob=illustration_enqueue($p,'');$calls=[];
-    illustration_run_one(function($path,$payload,$key)use($mock){
-        $result=$mock($path,$payload,$key);
-        if($path==='chat/completions'){$plan=json_decode($result['choices'][0]['message']['content'],true);unset($plan['anchor'],$plan['anchor_reason']);$result['choices'][0]['message']['content']=json_encode($plan);}
-        return $result;
-    });
-    $scenePlan=illustration_result($sceneJob,(int)$p['id']);$sceneInput=json_decode($calls[0][1]['messages'][1]['content'],true);
-    verify_illustration(count($sceneInput['previous_images'])>0 && count($sceneInput['previous_images'])<=5 && isset($sceneInput['previous_images'][0]['prompt']),'reader receives bounded previous visual concepts from the frozen snapshot');
-    verify_illustration(json_decode($scenePlan['plan'],true)['anchor']==='' && str_contains($calls[1][1]['prompt'],'Обещанное тепло не для всех') && str_contains($calls[1][1]['prompt'],'Общий огонь и один исключённый уголёк') && !str_contains($calls[1][1]['prompt'],'Дополнительная деталь:'),'whole-scene conflict and composition reach painter without a mandatory accessory');
-    $missingAnchor=illustration_enqueue($p,'');$anchorCalls=[];
-    illustration_run_one(function($path,$payload,$key)use(&$anchorCalls){$anchorCalls[]=$path;return ['choices'=>[['message'=>['content'=>json_encode(['prompt'=>'Один образ без выбранной детали'])]]]];});
-    verify_illustration($anchorCalls===['chat/completions'] && $db->query('SELECT state FROM illustration_jobs WHERE id='.$missingAnchor)->fetchColumn()==='failed','missing conflict and composition stop before paid painter call without retry');
+    $simpleInput=json_decode($calls[0][1]['messages'][1]['content'],true);
+    verify_illustration(!isset($simpleInput['previous_images']) && !str_contains($calls[0][1]['messages'][0]['content'],'деталь-якорь') && !str_contains($calls[1][1]['prompt'],'Выразительный приём:'),'restored simple reader and painter prompts without history or required anchors');
     $beforeDelete=post((int)$p['id']);$jobCount=(int)$db->query('SELECT count(*) FROM illustration_jobs')->fetchColumn();
     expect_illustration_error(fn()=>illustration_delete($styledJob,(int)$p['id']+999));
     expect_illustration_error(fn()=>illustration_delete($stale,(int)$p['id']));

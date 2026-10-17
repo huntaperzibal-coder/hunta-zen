@@ -22,7 +22,6 @@ function illustration_editor(array $p): void {
         if($job['error'])echo '<p role="status">'.h($job['error']).'</p>';
         if($job['plan']){
             $plan=json_decode($job['plan'],true);
-            if(is_string($plan['device']??null)&&is_string($plan['anchor']??null))echo '<p class="hint">Приём: '.h($plan['device']).($plan['anchor']!==''?' · Деталь: '.h($plan['anchor']):'').'</p>';
             if(is_array($plan['style_profile']??null))echo '<p class="hint">'.h((string)($plan['style_profile']['title']??'')).'</p>';
             echo '<details><summary>Мысль и визуальный образ</summary><p>'.h(is_string($plan['scene']??null)?$plan['scene']:'').'</p><p>'.h((string)($plan['prompt']??'')).'</p></details>';
         }
