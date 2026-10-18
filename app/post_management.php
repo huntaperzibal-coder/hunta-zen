@@ -1,29 +1,33 @@
 <?php
 declare(strict_types=1);
 /** Caller holds telegram.lock; cancellations also stop a worker's stale queue claim. */
-function post_remove_telegram(int $id,?callable $transport=null): void {
+function post_remove_telegram(int $id,?callable $transport=null,?string $channel=null): void {
     global $db,$config;
-    $q=$db->prepare("SELECT 1 FROM telegram_deliveries WHERE post_id=? AND state IN ('unknown','sending')");$q->execute([$id]);
+    $filter=$channel===null?'':' AND channel=?';$params=$channel===null?[$id]:[$id,$channel];
+    $q=$db->prepare("SELECT 1 FROM telegram_deliveries WHERE post_id=? AND state IN ('unknown','sending')".$filter);$q->execute($params);
     if($q->fetchColumn())throw new RuntimeException('Сначала проверь неизвестный результат отправки в редакторе. Удаление остановлено.');
-    $q=$db->prepare("SELECT 1 FROM telegram_deliveries WHERE post_id=? AND state='sent' AND message_id IS NULL");$q->execute([$id]);if($q->fetchColumn())throw new RuntimeException('Не сохранён номер опубликованного сообщения. Сначала проверь публикацию в канале.');
-    $q=$db->prepare('SELECT channel,message_id FROM telegram_parts WHERE post_id=? UNION SELECT channel,message_id FROM telegram_deliveries WHERE post_id=?');$q->execute([$id,$id]);
+    $q=$db->prepare("SELECT 1 FROM telegram_deliveries WHERE post_id=? AND state='sent' AND message_id IS NULL".$filter);$q->execute($params);if($q->fetchColumn())throw new RuntimeException('Не сохранён номер опубликованного сообщения. Сначала проверь публикацию в канале.');
+    $q=$db->prepare('SELECT channel,message_id FROM telegram_parts WHERE post_id=?'.$filter.' UNION SELECT channel,message_id FROM telegram_deliveries WHERE post_id=?'.$filter);$q->execute(array_merge($params,$params));
     foreach($q->fetchAll() as $row){
         if(!$row['message_id'])continue;
         if(empty($config['telegram_token']))throw new RuntimeException('Подключи бота для удаления публикации из Telegram.');
         $payload=['chat_id'=>$row['channel'],'message_id'=>(int)$row['message_id']];
+        $originalConfig=$config;
+        $channels=telegram_channels();if(isset($channels[$row['channel']]))telegram_select_channel($row['channel']);
         try{$response=$transport?$transport('deleteMessage',$payload):telegram_request('deleteMessage',$payload);}
         catch(Throwable $e){throw new RuntimeException('Telegram не подтвердил удаление. Пост сохранён в системе; можно повторить удаление после проверки канала.');}
+        finally{$config=$originalConfig;}
         $error=(string)($response['description']??'');
         if(empty($response['ok'])&&!str_contains(strtolower($error),'message to delete not found')&&!str_contains($error,'MESSAGE_ID_INVALID'))throw new RuntimeException('Не удалось удалить сообщение из Telegram: '.telegram_safe_error($error).'. Пост сохранён в системе. Возможно, нужно удалить сообщение вручную в канале.');
         $db->prepare('DELETE FROM telegram_parts WHERE post_id=? AND channel=? AND message_id=?')->execute([$id,$row['channel'],$row['message_id']]);
         $db->prepare('DELETE FROM telegram_deliveries WHERE post_id=? AND channel=? AND message_id=?')->execute([$id,$row['channel'],$row['message_id']]);
     }
-    $db->prepare('DELETE FROM telegram_parts WHERE post_id=?')->execute([$id]);
-    $db->prepare('DELETE FROM telegram_deliveries WHERE post_id=?')->execute([$id]);
+    $db->prepare('DELETE FROM telegram_parts WHERE post_id=?'.$filter)->execute($params);
+    $db->prepare('DELETE FROM telegram_deliveries WHERE post_id=?'.$filter)->execute($params);
     audit('telegram:removed',$id);
 }
 function post_manage(int $id,int $revision,string $command,?callable $transport=null): void {
-    global $db,$storage;
+    global $db,$storage,$config;
     if(!in_array($command,['site_hide','site_publish','telegram_delete','post_delete'],true))throw new RuntimeException('Неизвестное действие.');
     $lock=fopen($storage.'/telegram.lock','c');if(!$lock||!flock($lock,LOCK_EX|LOCK_NB))throw new RuntimeException('Сейчас идёт отправка. Повтори после её завершения.');
     try{
@@ -36,8 +40,10 @@ function post_manage(int $id,int $revision,string $command,?callable $transport=
             audit('manage:'.$command,$id);return;
         }
         if($command==='post_delete')database_backup_create();
-        telegram_cancel_schedule($id);
-        post_remove_telegram($id,$transport);
+        $channel=$command==='telegram_delete'?(string)($config['telegram_channel']??''):null;
+        if($channel==='')throw new RuntimeException('Выбери канал для удаления.');
+        telegram_cancel_schedule($id,$channel);
+        post_remove_telegram($id,$transport,$channel);
         if($command==='post_delete'){
             $db->beginTransaction();
             try{
@@ -49,8 +55,10 @@ function post_manage(int $id,int $revision,string $command,?callable $transport=
     }finally{flock($lock,LOCK_UN);fclose($lock);}
 }
 function post_management_controls(array $p,string $scope,string $category): string {
+    global $config;
+    $channel=(string)($config['telegram_channel']??'');
     $id=(int)$p['id'];$onSite=$p['status']==='published';
     $label=$onSite?'Снять с сайта':'Опубликовать на сайте';
     $question=$onSite?'Снять пост с сайта? В системе и Telegram он останется.':'Опубликовать пост на сайте?';
-    return '<details class="post-manage"><summary>Управление</summary><form method="post">'.csrf().'<input type="hidden" name="action" value="post_manage"><input type="hidden" name="id" value="'.$id.'"><input type="hidden" name="revision" value="'.(int)$p['revision'].'"><input type="hidden" name="list_scope" value="'.h($scope).'"><input type="hidden" name="list_category" value="'.h($category).'"><button name="command" value="'.($onSite?'site_hide':'site_publish').'" data-confirm="'.h($question).'">'.$label.'</button><button name="command" value="telegram_delete" data-confirm="Удалить публикации этого поста из Telegram и отменить его отложенные отправки? Пост в системе и на сайте останется.">Удалить из Telegram</button><button class="post-delete" name="command" value="post_delete" data-confirm="Удалить пост полностью: из системы, с сайта и из Telegram? Перед удалением будет создана резервная копия базы.">Удалить пост полностью</button></form></details>';
+    return '<details class="post-manage"><summary>Управление</summary><form method="post">'.csrf().'<input type="hidden" name="action" value="post_manage"><input type="hidden" name="telegram_destination" value="'.h($channel).'"><input type="hidden" name="id" value="'.$id.'"><input type="hidden" name="revision" value="'.(int)$p['revision'].'"><input type="hidden" name="list_scope" value="'.h($scope).'"><input type="hidden" name="list_category" value="'.h($category).'"><button name="command" value="'.($onSite?'site_hide':'site_publish').'" data-confirm="'.h($question).'">'.$label.'</button><button name="command" value="telegram_delete" data-confirm="Удалить публикацию из выбранного канала «'.h(telegram_channel_name($channel)).'» и отменить отправку в этот канал? Пост в системе и на сайте останется.">Удалить из выбранного канала</button><button class="post-delete" name="command" value="post_delete" data-confirm="Удалить пост полностью: из системы, с сайта и из Telegram? Перед удалением будет создана резервная копия базы.">Удалить пост полностью</button></form></details>';
 }

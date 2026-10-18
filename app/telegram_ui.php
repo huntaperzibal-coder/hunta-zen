@@ -20,14 +20,14 @@ function telegram_list_indicator(array $row): string {
         $kind='failed';$label='Ошибка отправки';$hint='Отправка остановлена. Подробности и проверка результата — в редакторе.';
     }
     if($schedule==='scheduled' && !empty($row['telegram_due_at']))$hint.=' Назначено на '.(new DateTimeImmutable('@'.(int)$row['telegram_due_at']))->setTimezone(new DateTimeZone('Asia/Novosibirsk'))->format('d.m.Y H:i').' (UTC+7).';
-    return '<a class="tg-list-link" href="/admin.php?view=edit&amp;id='.(int)$row['id'].'#telegram" title="'.h($hint).'"><span class="status-chip tg-list-status tg-list-'.$kind.'">'.h($label).'</span>'.($note!==''?'<small class="tg-list-note">'.h($note).'</small>':'').'</a>';
+    return '<a class="tg-list-link" href="/admin.php?view=edit&amp;id='.(int)$row['id'].h(telegram_channel_query()).'#telegram" title="'.h($hint).'"><span class="status-chip tg-list-status tg-list-'.$kind.'">'.h($label).'</span>'.($note!==''?'<small class="tg-list-note">'.h($note).'</small>':'').'</a>';
 }
 function telegram_editor(array $p,?array $delivery): void {
     global $db,$config;
     $channel=(string)($config['telegram_channel']??'');
-    $q=$db->prepare("SELECT * FROM telegram_schedule WHERE post_id=? AND state IN ('scheduled','running') ORDER BY id DESC");$q->execute([$p['id']]);$pending=$q->fetchAll();
+    $q=$db->prepare("SELECT * FROM telegram_schedule WHERE post_id=? AND channel=? AND state IN ('scheduled','running') ORDER BY id DESC");$q->execute([$p['id'],$channel]);$pending=$q->fetchAll();
     $running=false;foreach($pending as $job)if($job['state']==='running')$running=true;
-    $q=$db->prepare("SELECT * FROM telegram_schedule WHERE post_id=? AND state NOT IN ('scheduled','running') ORDER BY id DESC LIMIT 5");$q->execute([$p['id']]);$history=$q->fetchAll();
+    $q=$db->prepare("SELECT * FROM telegram_schedule WHERE post_id=? AND channel=? AND state NOT IN ('scheduled','running') ORDER BY id DESC LIMIT 5");$q->execute([$p['id'],$channel]);$history=$q->fetchAll();
     $due=date('Y-m-d\TH:i',time()+3600);
     foreach($pending as $job)if($job['channel']===$channel){$due=date('Y-m-d\TH:i',(int)$job['due_at']);break;}
     $footerOptions='';foreach(['auto'=>'По категории: только Винни и Гена','on'=>'Добавлять','off'=>'Не добавлять'] as $value=>$label)$footerOptions.='<option value="'.$value.'"'.(($p['telegram_footer']??'auto')===$value?' selected':'').'>'.h($label).'</option>';
@@ -35,12 +35,24 @@ function telegram_editor(array $p,?array $delivery): void {
     $sent=($delivery['state']??'')==='sent';
     $needsCheck=$delivery && (in_array($delivery['state'],['unknown','sending'],true)||telegram_invalid_message($delivery['error']));
     $connected=$channel!==''&&!empty($config['telegram_token']);
-    echo '<details id="telegram" open><summary>Telegram</summary><div class="tg-destination"><span>Канал: <strong>'.h($config['telegram_channel_title']??($channel?:'не подключён')).'</strong></span><a href="/admin.php?view=telegram">Настроить канал</a></div><p class="tg-delivery-status"><strong>'.h($sent?'✓ Пост размещён в канале':telegram_status_label((string)($delivery['state']??''))).'</strong></p><p id="telegram-feedback" role="status" aria-live="polite"></p>';
+    $options='';foreach(telegram_channels() as $key=>$connection)$options.='<option value="'.h((string)$key).'"'.((string)$key===$channel?' selected':'').'>'.h($connection['telegram_channel_title']??(string)$key).'</option>';
+    echo '<details id="telegram" open><summary>Telegram</summary><input type="hidden" name="telegram_destination" value="'.h($channel).'"><label>Канал публикации<select class="user-input" name="telegram_next_channel">'.$options.'</select></label><button type="submit" class="btn-secondary" name="action" value="telegram_select">Выбрать канал</button><p class="hint">Выбор сохранит текст. Отправка, обновление и расписание ниже относятся к выбранному каналу.</p><div class="tg-destination"><span>Канал: <strong>'.h($config['telegram_channel_title']??($channel?:'не подключён')).'</strong></span><a href="/admin.php?view=telegram">Все каналы</a></div><p class="tg-delivery-status"><strong>'.h($sent?'✓ Пост размещён в канале':telegram_status_label((string)($delivery['state']??''))).'</strong></p><p id="telegram-feedback" role="status" aria-live="polite"></p>';
+    if(count(telegram_channels())>1){
+        echo '<ul class="tg-channel-statuses">';
+        $states=$db->prepare('SELECT state FROM telegram_deliveries WHERE post_id=? AND channel=?');
+        foreach(telegram_channels() as $key=>$connection){
+            $states->execute([$p['id'],(string)$key]);$state=(string)($states->fetchColumn()?:'');
+            $queued=$db->prepare("SELECT state FROM telegram_schedule WHERE post_id=? AND channel=? AND state IN ('scheduled','running') LIMIT 1");$queued->execute([$p['id'],(string)$key]);$queue=(string)($queued->fetchColumn()?:'');
+            $label=telegram_status_label($state);if($queue!=='')$label=$state==='sent'?$label.' · '.telegram_status_label($queue):telegram_status_label($queue);
+            echo '<li>'.h($connection['telegram_channel_title']??(string)$key).' — '.h($label).'</li>';
+        }
+        echo '</ul>';
+    }
     if(!empty($delivery['error']))echo '<p class="auth-error tg-delivery-error">'.h($delivery['error']).'</p>';
     if($pending){
         echo '<div class="tg-schedule-current"><strong>Отправка назначена</strong>';
-        foreach($pending as $job)echo '<p>'.($job['state']==='running'?'Отправляется':'Ожидает отправки').' · <strong>'.h(date('d.m.Y H:i',(int)$job['due_at'])).'</strong> (UTC+7)'.($job['channel']!==$channel?'<br><span class="hint">В ранее выбранный канал: '.h($job['channel']).'</span>':'').'</p>';
-        if(!$running)echo '<button type="submit" class="btn-secondary" name="action" value="telegram_cancel">'.(count($pending)>1?'Отменить все ожидающие отправки этого поста':'Отменить эту отправку').'</button><p class="hint">Отменяет только расписание. Уже опубликованный пост остаётся в канале.</p>';
+        foreach($pending as $job)echo '<p>'.($job['state']==='running'?'Отправляется':'Ожидает отправки').' · <strong>'.h(date('d.m.Y H:i',(int)$job['due_at'])).'</strong> (UTC+7)'.($job['channel']!==$channel?'<br><span class="hint">В ранее выбранный канал: '.h(telegram_channel_name($job['channel'])).'</span>':'').'</p>';
+        if(!$running)echo '<button type="submit" class="btn-secondary" name="action" value="telegram_cancel">'.(count($pending)>1?'Отменить все ожидающие отправки этого поста':'Отменить эту отправку').'</button><p class="hint">Отменяет только расписание выбранного канала. Уже опубликованный пост остаётся в канале.</p>';
         else echo '<p class="hint">Обработчик уже начал отправку. Дождись результата.</p>';
         echo '</div>';
     }
@@ -63,14 +75,18 @@ function telegram_editor(array $p,?array $delivery): void {
 function telegram_page(): void {
     global $config,$db,$storage;
     $channel=(string)($config['telegram_channel']??'');
-    echo '<h1>Telegram</h1><h2>Подключение канала</h2><p>Сначала подключи тестовый канал. Создай бота через <a href="https://t.me/BotFather" target="_blank" rel="noopener">BotFather</a>, добавь его администратором канала с правами публикации и редактирования сообщений.</p><p>Сейчас: <strong>'.h($config['telegram_channel_title']??($channel?:'канал не подключён')).'</strong>'.(!empty($config['telegram_bot_name'])?' · @'.h($config['telegram_bot_name']):'').'</p><form method="post" autocomplete="off">'.csrf().'<input type="hidden" name="action" value="telegram_connection"><label>Токен бота<input class="user-input" type="password" name="telegram_token" autocomplete="new-password" placeholder="'.(!empty($config['telegram_token'])?'Сохранён. Оставь пустым, чтобы не менять':'Токен из BotFather').'"></label><label>Тестовый канал<input class="user-input" type="text" name="telegram_channel" value="'.h($channel).'" placeholder="@имя_канала или -100…"></label><button class="btn-main" type="submit">Проверить и сохранить подключение</button><p class="hint">Проверка не публикует сообщений. Токен хранится в закрытом файле на сервере и не показывается в форме. При смене канала ожидающие задания не перенаправляются в новый канал.</p></form>';
+    echo '<h1>Telegram</h1><h2>Каналы</h2><p>Тексты общие, публикации и расписание отдельные для каждого канала.</p>';
+    foreach(telegram_channels() as $key=>$connection){
+        echo '<div class="tg-channel-card"><h3>'.h($connection['telegram_channel_title']??(string)$key).'</h3><p>'.h((string)$key).((string)$key===$channel?' · выбран':'').((string)$key===($config['telegram_default_channel']??$channel)?' · по умолчанию':'').'</p><p><a class="btn-secondary" href="/admin.php?view=telegram&amp;channel='.rawurlencode((string)$key).'">Открыть канал</a></p><form method="post">'.csrf().'<input type="hidden" name="action" value="telegram_default"><input type="hidden" name="default_channel" value="'.h((string)$key).'"><button class="btn-secondary" type="submit">Сделать каналом по умолчанию</button></form></div>';
+    }
+    echo '<h2>Добавить или обновить канал</h2><p>Добавь бота администратором каждого канала с правами публикации, редактирования и удаления сообщений. Можно использовать одного бота для всех каналов.</p><form method="post" autocomplete="off">'.csrf().'<input type="hidden" name="action" value="telegram_connection"><input type="hidden" name="telegram_destination" value="'.h($channel).'"><label>Название в админке<input class="user-input" type="text" name="channel_label" maxlength="100" placeholder="Основной или Тестовый"></label><label>Канал<input class="user-input" type="text" name="telegram_channel" placeholder="@имя_канала или -100…" required></label><label>Токен бота<input class="user-input" type="password" name="telegram_token" autocomplete="new-password" placeholder="'.(!empty($config['telegram_token'])?'Оставь пустым для бота выбранного канала':'Токен из BotFather').'"></label><label><input type="checkbox" name="make_default" value="1"> Использовать этот канал по умолчанию</label><button class="btn-main" type="submit">Проверить и сохранить канал</button><p class="hint">Проверка не публикует сообщений. Другие каналы, их сообщения и задания сохраняются. Чтобы обновить подключение, укажи тот же адрес канала. Секреты хранятся только на сервере.</p></form>';
     $heartbeat=is_file($storage.'/telegram-heartbeat')?(int)file_get_contents($storage.'/telegram-heartbeat'):0;
     echo '<h2>Отложенная отправка</h2><p>'.($heartbeat>time()-180?'Обработчик работает. Последняя проверка: '.h(date('H:i:s',$heartbeat)):'Обработчик сейчас не подтверждён. Пока он не запущен, отложенные публикации останутся в очереди.').'</p><p>Один раз добавь в панели Beget → Cron задачу каждую минуту:</p><pre>'.h('/usr/local/bin/php8.2 '.realpath(ROOT).'/tools/telegram_worker.php').'</pre><p class="hint">Команда работает на хостинге, без расхода минут GitHub Actions. При сетевой ошибке автоматического повтора нет: сначала проверь канал. Зависшие задания не отправляются повторно.</p>';
     $q=$db->query("SELECT s.*,p.title FROM telegram_schedule s JOIN posts p ON p.id=s.post_id ORDER BY s.id DESC LIMIT 30");
     echo '<div class="table-scroll"><table class="index-table"><thead><tr><th>Запись</th><th>Когда (UTC+7)</th><th>Состояние</th></tr></thead><tbody>';
-    foreach($q as $job)echo '<tr><td><a href="/admin.php?view=edit&amp;id='.(int)$job['post_id'].'#telegram">'.h($job['title']).'</a><br><small>'.h($job['channel']).'</small></td><td>'.h(date('d.m.Y H:i',(int)$job['due_at'])).'</td><td>'.h(telegram_status_label($job['state'])).($job['error']?'<br>'.h($job['error']):'').'</td></tr>';
-    echo '</tbody></table></div><h2>Записи в канале</h2><div class="table-scroll"><table class="index-table"><thead><tr><th>Запись</th><th>В выбранном канале</th><th></th></tr></thead><tbody>';
+    foreach($q as $job)echo '<tr><td><a href="/admin.php?view=edit&amp;id='.(int)$job['post_id'].'&amp;channel='.rawurlencode($job['channel']).'#telegram">'.h($job['title']).'</a><br><small>'.h(telegram_channel_name($job['channel'])).'</small></td><td>'.h(date('d.m.Y H:i',(int)$job['due_at'])).'</td><td>'.h(telegram_status_label($job['state'])).($job['error']?'<br>'.h($job['error']):'').'</td></tr>';
+    echo '</tbody></table></div><h2>Записи в канале: '.h(telegram_channel_name($channel)).'</h2><div class="table-scroll"><table class="index-table"><thead><tr><th>Запись</th><th>В выбранном канале</th><th></th></tr></thead><tbody>';
     $q=$db->prepare("SELECT p.*,d.state FROM posts p LEFT JOIN telegram_deliveries d ON d.post_id=p.id AND d.channel=? WHERE trim(p.title)<>'' ORDER BY p.published_at DESC LIMIT 100");$q->execute([$channel]);
-    foreach($q as $row)echo '<tr><td>'.h($row['title']).'</td><td>'.h(telegram_status_label((string)($row['state']??''))).'</td><td><a class="btn-edit" href="/admin.php?view=edit&amp;id='.(int)$row['id'].'#telegram">Подготовить отправку</a></td></tr>';
+    foreach($q as $row)echo '<tr><td>'.h($row['title']).'</td><td>'.h(telegram_status_label((string)($row['state']??''))).'</td><td><a class="btn-edit" href="/admin.php?view=edit&amp;id='.(int)$row['id'].h(telegram_channel_query()).'#telegram">Подготовить отправку</a></td></tr>';
     echo '</tbody></table></div>';
 }

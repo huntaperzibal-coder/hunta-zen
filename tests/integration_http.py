@@ -118,7 +118,7 @@ with tempfile.TemporaryDirectory(prefix='hunta-http-') as tmp:
                 def badge():
                     code,panel,_=request('/admin.php?category=vinnie')
                     assert code==200 and '<th>Telegram</th>' in panel
-                    assert f'href="/admin.php?view=edit&amp;id={pid}#telegram"' in panel
+                    assert f'href="/admin.php?view=edit&amp;id={pid}&amp;channel=-100100#telegram"' in panel
                     return re.search(r'class="status-chip tg-list-status tg-list-([^" ]+)">([^<]+)',panel).groups()
                 assert badge()==('none','Не размещено')
                 records.execute("INSERT INTO telegram_deliveries(post_id,channel,state,updated_at) VALUES(?,'-100OTHER','sent',datetime('now'))",[pid]);records.commit()
@@ -319,6 +319,29 @@ with tempfile.TemporaryDirectory(prefix='hunta-http-') as tmp:
             no_redirect=urllib.request.build_opener(NoRedirect)
             code,_,_=request('/?p=site-hub',opener=no_redirect,headers={'Host':'example.test'})
             assert code==301,'HTTP on configured host redirects to HTTPS before rendering'
+            # Multiple private channel connections; all publication calls stay offline.
+            test_conn={'telegram_channel':'-100100','telegram_channel_title':'Тестовый','telegram_token':'123456:'+('a'*35)}
+            main_conn={'telegram_channel':'-100200','telegram_channel_title':'Основной','telegram_token':'654321:'+('b'*35)}
+            connections={**test_conn,'telegram_channels':{'-100100':test_conn,'-100200':main_conn}}
+            (storage/'telegram-connection.php').write_text('<?php return json_decode('+repr(json.dumps(connections))+',true);')
+            with sqlite3.connect(storage/'blog.sqlite') as records:
+                records.execute("INSERT OR REPLACE INTO telegram_deliveries(post_id,channel,message_id,state,updated_at) VALUES(?,'-100100',999,'sent',?)",(ids[1],'2026-10-18'))
+            _,edit,_=request('/admin.php?view=edit&id='+str(ids[1])+'&channel=-100100')
+            assert '✓ Пост размещён в канале' in edit and 'Тестовый — Отправлено' in edit and 'Основной — Ещё не отправлено' in edit,'independent channel statuses'
+            switch={'action':'telegram_select','csrf':csrf,'id':ids[1],'revision':re.search(r'name="revision" value="(\d+)"',edit)[1],'title':'Общий пост','body':'Сохранено при выборе канала','body_format':'html','telegram_destination':'-100100','telegram_next_channel':'-100200'}
+            code,main_edit,switch_url=request('/admin.php',switch)
+            assert code==200 and 'channel=-100200' in switch_url and switch_url.endswith('#telegram'),'editor channel switch keeps section and destination'
+            assert 'Канал: <strong>Основной</strong>' in main_edit and 'Сохранено при выборе канала' in main_edit,'switch saves editor text and renders selected channel'
+            old_form=request('/admin.php',{'action':'telegram_cancel','csrf':csrf,'id':ids[1]})[1]
+            assert 'выбери канал перед действием' in old_form,'old forms without explicit destination cannot act on a new default'
+            assert main_conn['telegram_token'] not in main_edit and test_conn['telegram_token'] not in main_edit,'bot tokens never rendered'
+            assert request('/admin.php',{'action':'telegram_default','default_channel':'-100200'})[0]==403,'default changes require csrf'
+            assert request('/admin.php',{'action':'telegram_default','default_channel':'-100200','csrf':csrf})[0]==200
+            default_edit=request('/admin.php?view=edit&id='+str(ids[1]))[1]
+            assert 'Канал: <strong>Основной</strong>' in default_edit,'default channel survives fresh request'
+            assert 'Канал: <strong>Тестовый</strong>' in request('/admin.php?view=edit&id='+str(ids[1])+'&channel=-100100')[1],'explicit old tab keeps its channel after default changes'
+            with sqlite3.connect(storage/'blog.sqlite') as records:
+                assert records.execute("SELECT message_id FROM telegram_deliveries WHERE post_id=? AND channel='-100100'",[ids[1]]).fetchone()[0]==999,'connection selection preserves test delivery history'
             print('OK: HTTP login, CSRF, drafts, upload, private media, publishing, XSS, conflicts, backup')
         finally:
             server.terminate();server.wait(timeout=5)

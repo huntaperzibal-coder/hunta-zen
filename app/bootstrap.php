@@ -14,6 +14,7 @@ require_once __DIR__.'/seo.php';
 seo_redirect();
 $storage = $config['storage'];
 if(is_file($storage.'/telegram-connection.php'))$config=array_replace($config,require $storage.'/telegram-connection.php');
+$config['telegram_default_channel']=(string)($config['telegram_channel']??'');
 if (PHP_SAPI !== 'cli') {
     ini_set('display_errors','0');
     ini_set('log_errors','1');
@@ -38,6 +39,7 @@ require_once __DIR__ . '/reader_services.php';
 require_once __DIR__ . '/author_pages.php';
 require_once __DIR__ . '/orda_layout.php';
 require_once __DIR__ . '/telegram.php';
+require_once __DIR__ . '/telegram_channels.php';
 require_once __DIR__ . '/telegram_schedule.php';
 require_once __DIR__ . '/telegram_ui.php';
 require_once __DIR__ . '/post_management.php';

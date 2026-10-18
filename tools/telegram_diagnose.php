@@ -8,15 +8,15 @@ $heartbeat=is_file($storage.'/telegram-heartbeat')?(int)file_get_contents($stora
 echo 'Последний запуск обработчика: '.($heartbeat?date('d.m.Y H:i:s',$heartbeat).' ('.max(0,time()-$heartbeat).' с назад)':'не зафиксирован')."\n";
 echo 'Канал: '.(!empty($config['telegram_channel'])?'подключён':'не указан')."\n";
 echo "Очередь — последние 5 задач:\n";
-$q=$db->query('SELECT id,post_id,due_at,state,error,updated_at FROM telegram_schedule ORDER BY id DESC LIMIT 5');
+$q=$db->query('SELECT id,post_id,channel,due_at,state,error,updated_at FROM telegram_schedule ORDER BY id DESC LIMIT 5');
 foreach($q as $row){
-    echo '#'.(int)$row['id'].'; пост '.(int)$row['post_id'].'; назначено '.date('d.m.Y H:i:s',(int)$row['due_at']).'; состояние '.telegram_safe_error($row['state']).'; обновлено '.telegram_safe_error($row['updated_at'])."\n";
+    echo '#'.(int)$row['id'].'; пост '.(int)$row['post_id'].'; канал '.telegram_safe_error(telegram_channel_name($row['channel'])).'; назначено '.date('d.m.Y H:i:s',(int)$row['due_at']).'; состояние '.telegram_safe_error($row['state']).'; обновлено '.telegram_safe_error($row['updated_at'])."\n";
     if($row['error']!=='')echo '  '.telegram_safe_error($row['error'])."\n";
 }
 echo "Отправки — последние 5 результатов:\n";
-$q=$db->query('SELECT post_id,state,error,updated_at FROM telegram_deliveries ORDER BY updated_at DESC LIMIT 5');
+$q=$db->query('SELECT post_id,channel,state,error,updated_at FROM telegram_deliveries ORDER BY updated_at DESC LIMIT 5');
 foreach($q as $row){
-    echo 'Пост '.(int)$row['post_id'].'; состояние '.telegram_safe_error($row['state']).'; обновлено '.telegram_safe_error($row['updated_at'])."\n";
+    echo 'Пост '.(int)$row['post_id'].'; канал '.telegram_safe_error(telegram_channel_name($row['channel'])).'; состояние '.telegram_safe_error($row['state']).'; обновлено '.telegram_safe_error($row['updated_at'])."\n";
     if($row['error']!=='')echo '  '.telegram_safe_error($row['error'])."\n";
 }
 if(in_array('--offline',$argv,true)){echo "Проверка связи пропущена (--offline). Ничего не отправлено.\n";exit;}

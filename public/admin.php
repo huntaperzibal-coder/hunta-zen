@@ -23,15 +23,23 @@ if ($_SERVER['REQUEST_METHOD']==='POST') {
     } else {
         guard();
         try {
+            $needsDestination=in_array($action,['telegram','telegram_schedule','telegram_cancel','resolve'],true)||($action==='post_manage'&&($_POST['command']??'')==='telegram_delete');
+            if($needsDestination&&count(telegram_channels())>1&&empty($_POST['telegram_destination']))throw new RuntimeException('Открой редактор заново и выбери канал перед действием.');
+            if(isset($_POST['telegram_destination'])&&$_POST['telegram_destination']!=='')telegram_select_channel((string)$_POST['telegram_destination']);
+            if($action==='telegram_default'){
+                $channels=telegram_channels();$target=(string)($_POST['default_channel']??'');
+                if(!isset($channels[$target]))throw new RuntimeException('Канал не подключён.');
+                telegram_store_channel($channels[$target],true);redirect('/admin.php?view=telegram&saved=1');
+            }
             if ($action==='logout') { $_SESSION=[]; session_destroy();redirect('/admin.php?view=login'); }
-            if ($action==='telegram_connection') { telegram_save_connection($_POST);redirect('/admin.php?view=telegram&saved=1'); }
+            if ($action==='telegram_connection') { telegram_save_connection($_POST);redirect('/admin.php?view=telegram&saved=1'.telegram_channel_query()); }
             if ($action==='author_settings') { reader_author_settings_save($_POST,$_FILES);redirect('/admin.php?view=author&saved=1#author-settings-status'); }
             if ($action==='feedback_delete') { $db->prepare('DELETE FROM reader_feedback WHERE id=?')->execute([(int)($_POST['message_id']??0)]);audit('feedback:delete');redirect('/admin.php?view=feedback'); }
             if ($action==='feedback_read') { $db->prepare('UPDATE reader_feedback SET read_at=? WHERE id=?')->execute([time(),(int)($_POST['message_id']??0)]);redirect('/admin.php?view=feedback'); }
             if ($action==='post_manage') {
                 post_manage((int)($_POST['id']??0),(int)($_POST['revision']??0),(string)($_POST['command']??''));
                 $scope=(string)($_POST['list_scope']??'');if(!in_array($scope,['site','telegram','both','local'],true))$scope='';
-                redirect('/admin.php?'.http_build_query(array_filter(['scope'=>$scope,'category'=>(string)($_POST['list_category']??''),'managed'=>'1'])).'#post-'.(int)($_POST['id']??0));
+                redirect('/admin.php?'.http_build_query(array_filter(['scope'=>$scope,'category'=>(string)($_POST['list_category']??''),'managed'=>'1','channel'=>(string)($config['telegram_channel']??'')])).'#post-'.(int)($_POST['id']??0));
             }
             if ($action==='new') {
                 $stamp=now();$db->prepare('INSERT INTO posts(slug,created_at,updated_at) VALUES(?,?,?)')->execute(['draft-'.bin2hex(random_bytes(8)),$stamp,$stamp]);redirect('/admin.php?view=edit&id='.$db->lastInsertId());
@@ -64,7 +72,7 @@ if ($_SERVER['REQUEST_METHOD']==='POST') {
                 illustration_result((int)$applyId,(int)($_POST['id']??0));
                 $action='illustration_apply';
             }
-            if (in_array($action,['illustration_delete','illustration_dispatch','illustrate','illustration_apply','save','autosave','publish','unpublish','upload','telegram','telegram_schedule','telegram_cancel','resolve'],true)) {
+            if (in_array($action,['illustration_delete','illustration_dispatch','illustrate','illustration_apply','save','autosave','publish','unpublish','upload','telegram','telegram_schedule','telegram_cancel','telegram_select','resolve'],true)) {
                 $id=(int)($_POST['id']??0);
                 $input=$_POST;
                 if ($action==='publish') $input['status']='published';
@@ -81,9 +89,10 @@ if ($_SERVER['REQUEST_METHOD']==='POST') {
                         $db->prepare('UPDATE posts SET body=body || ?,revision=revision+1 WHERE id=?')->execute([$addition,$id]);
                     } else $db->prepare('UPDATE posts SET cover=?,revision=revision+1 WHERE id=?')->execute([$name,$id]);
                 }
-                if ($action==='telegram') { telegram_cancel_schedule($id);telegram_send($id); }
+                if($action==='telegram_select'){telegram_select_channel((string)($_POST['telegram_next_channel']??''));redirect('/admin.php?view=edit&id='.$id.telegram_channel_query().'#telegram');}
+                if ($action==='telegram') { telegram_cancel_schedule($id,(string)$config['telegram_channel']);telegram_send($id); }
                 if ($action==='telegram_schedule') telegram_schedule_post($id,(string)($_POST['telegram_due']??''));
-                if ($action==='telegram_cancel') $cancelledCount=telegram_cancel_schedule($id);
+                if ($action==='telegram_cancel') $cancelledCount=telegram_cancel_schedule($id,(string)$config['telegram_channel']);
                 if ($action==='resolve') {
                     if (empty($_POST['checked_channel'])) throw new RuntimeException('Сначала проверь результат в Telegram-канале.');
                     telegram_resolve($id,max(0,(int)($_POST['message_id']??0)));
@@ -94,7 +103,7 @@ if ($_SERVER['REQUEST_METHOD']==='POST') {
                     header('Content-Type: application/json');echo json_encode(['revision'=>$p['revision'],'html'=>$html,'message'=>$action==='telegram_cancel'?($cancelledCount>0?'Ожидающая отправка отменена.':'Ожидающей отправки уже нет. Состояние обновлено ниже.'):'Отправка запланирована на '.date('d.m.Y H:i',DateTimeImmutable::createFromFormat('!Y-m-d\TH:i',$_POST['telegram_due'],new DateTimeZone('Asia/Novosibirsk'))->getTimestamp()).' (UTC+7).'],JSON_UNESCAPED_UNICODE|JSON_THROW_ON_ERROR);exit;
                 }
                 if ($action==='autosave') { header('Content-Type: application/json'); echo json_encode(['revision'=>$p['revision'],'saved'=>date('H:i:s')]);exit; }
-                redirect('/admin.php?view=edit&id='.$id.'&saved=1'.(in_array($action,['illustration_delete','illustration_dispatch','illustrate','illustration_apply'],true)?'#illustrations':(in_array($action,['telegram','telegram_schedule','telegram_cancel','resolve'],true)?'#telegram':'' )));
+                redirect('/admin.php?view=edit&id='.$id.'&saved=1'.telegram_channel_query().(in_array($action,['illustration_delete','illustration_dispatch','illustrate','illustration_apply'],true)?'#illustrations':(in_array($action,['telegram','telegram_schedule','telegram_cancel','telegram_select','resolve'],true)?'#telegram':'' )));
             }
             if ($action==='settings') {
                 $title=trim((string)($_POST['title']??''));if ($title==='') throw new RuntimeException('У сайта должно быть название.');
@@ -126,7 +135,12 @@ if ($_SERVER['REQUEST_METHOD']==='POST') {
         }
     }
 }
-if (!authenticated()) $view='login'; else guard();
+if (!authenticated()) $view='login'; else {
+    guard();
+    if($_SERVER['REQUEST_METHOD']==='GET'&&!empty($_GET['channel'])){
+        try{telegram_select_channel((string)$_GET['channel']);}catch(RuntimeException $e){$error=$e->getMessage();$view='telegram';}
+    }
+}
 page_start('Дао — '.setting('title'),true);
 if ($error && $view!=='author') echo '<div class="auth-error" role="alert">'.h($error).'</div>';
 if(isset($_GET['managed']))echo '<div class="auth-success" role="status">Действие выполнено.</div>';
@@ -144,7 +158,7 @@ if ($view==='login') {
         if ($unsaved) foreach (['title','body','excerpt','telegram_text','telegram_footer','revision','category_id'] as $field) if (isset($unsaved[$field])) $p[$field]=$unsaved[$field];
         if ($unsaved && ($unsaved['body_format']??'')==='html') $p['body']=DAO_RICH_PREFIX.sanitize_article_html((string)$unsaved['body']);
         $q=$db->prepare('SELECT * FROM telegram_deliveries WHERE post_id=? AND channel=?');$q->execute([$p['id'],$config['telegram_channel']]);$delivery=$q->fetch();
-        echo '<div class="toolbar"><a href="/admin.php">← Записи</a><span class="status-chip">'.($p['status']==='published'?'На сайте':'Черновик').'</span><a target="_blank" href="/admin.php?view=preview&id='.$p['id'].'">Предпросмотр ↗</a><a href="#illustrations">Иллюстрации ↓</a></div>';
+        echo '<div class="toolbar"><a href="/admin.php?channel='.rawurlencode((string)($config['telegram_channel']??'')).'">← Записи</a><span class="status-chip">'.($p['status']==='published'?'На сайте':'Черновик').'</span><a target="_blank" href="/admin.php?view=preview&id='.$p['id'].'">Предпросмотр ↗</a><a href="#illustrations">Иллюстрации ↓</a></div>';
         echo '<form id="editor" data-video-limit="'.video_upload_limit().'" class="form-db" data-unsaved="'.($unsaved?'1':'0').'" method="post" enctype="multipart/form-data">'.csrf().'<input type="hidden" name="id" value="'.$p['id'].'"><input type="hidden" name="revision" value="'.$p['revision'].'"><label class="sr-only" for="title">Заголовок</label><input type="text" id="title" class="title-input user-input" name="title" maxlength="250" placeholder="Как назовём эту историю?" value="'.h($p['title']).'"><div class="post-category-field"><label for="category_id">Категория</label><select class="user-input" id="category_id" name="category_id">'.category_options((int)$p['category_id']).'</select></div><input type="hidden" name="body_format" value="html"><label class="sr-only" for="body">Текст</label><textarea id="body" class="writing user-input" name="body" placeholder="Что у тебя на душе?">'.h(body_for_editor($p['body'])).'</textarea><div class="savebar"><button type="submit" class="btn-main" name="action" value="save">Сохранить</button><span id="save-status" role="status">'.($unsaved?'Есть несохранённые изменения':'Все изменения сохранены').'</span><button class="btn-secondary" name="action" value="'.($p['status']==='published'?'unpublish':'publish').'">'.($p['status']==='published'?'Снять с сайта':'Опубликовать на сайте').'</button></div>';
         telegram_editor($p,$delivery?:null);
         echo '<details><summary>Фотографии</summary><p class="hint">JPEG, PNG, WebP до 12 МБ. Загрузка сохраняет и текст записи.</p>';
@@ -182,17 +196,20 @@ if ($view==='login') {
     echo '</ul>';
 } else {
     echo '<div class="section-head"><div><p class="eyebrow">Мастерская автора</p><h1>Мои истории</h1></div><form method="post">'.csrf().'<button type="submit" class="btn-main" name="action" value="new">＋ Написать</button></form></div>';
+    echo '<p class="hint">Статусы Telegram для канала: <strong>'.h(telegram_channel_name((string)($config['telegram_channel']??''))).'</strong></p><nav class="tabs">';
+    foreach(telegram_channels() as $key=>$connection)echo '<a href="/admin.php?channel='.rawurlencode((string)$key).'">'.h($connection['telegram_channel_title']??(string)$key).'</a>';
+    echo '</nav>';
     $filter=(string)($_GET['status']??'');if (!in_array($filter,['draft','published'],true))$filter='';
     $scope=(string)($_GET['scope']??'');if(!in_array($scope,['site','telegram','both','local'],true))$scope='';
     $categorySlug=(string)($_GET['category']??'');
     echo '<p class="hint">Все посты хранятся в системе. Сайт и Telegram — независимые места публикации.</p><nav class="tabs">';
     foreach([''=>'Все в системе','site'=>'На сайте','telegram'=>'В Telegram','both'=>'Сайт + Telegram','local'=>'Только в системе'] as $key=>$title){
-        $query=http_build_query(array_filter(['scope'=>$key,'category'=>$categorySlug]));
+        $query=http_build_query(array_filter(['scope'=>$key,'category'=>$categorySlug,'channel'=>(string)($config['telegram_channel']??'')]));
         echo '<a'.($scope===$key?' aria-current="page"':'').' href="/admin.php'.($query?'?'.h($query):'').'">'.h($title).'</a>';
     }
     echo '</nav>';
     $categorySlug=(string)($_GET['category']??'');$category=$categorySlug!==''?category_by_slug($categorySlug):null;
-    echo category_links('/admin.php',array_filter(['status'=>$filter,'scope'=>$scope,'category'=>$categorySlug],fn($v)=>$v!==''));
+    echo category_links('/admin.php',array_filter(['status'=>$filter,'scope'=>$scope,'category'=>$categorySlug,'channel'=>(string)($config['telegram_channel']??'')],fn($v)=>$v!==''));
     $where=[];$params=[];
     if($filter){$where[]='p.status=?';$params[]=$filter;}
     if($scope==='site')$where[]="p.status='published'";
@@ -209,7 +226,7 @@ if ($view==='login') {
     echo '<div class="index-stats"><div class="index-stat"><div class="index-stat-value">'.(int)$counts['total'].'</div><div class="index-stat-label">В системе</div></div><div class="index-stat"><div class="index-stat-value">'.(int)$counts['drafts'].'</div><div class="index-stat-label">Не на сайте</div></div><div class="index-stat"><div class="index-stat-value">'.(int)$counts['published'].'</div><div class="index-stat-label">На сайте</div></div><div class="index-stat"><div class="index-stat-value">'.$telegramCount.'</div><div class="index-stat-label">В Telegram</div></div></div>';
     if ($posts) {
         echo '<div class="table-scroll"><table class="index-table"><thead><tr><th>Название</th><th>Сайт</th><th>Telegram</th><th>Изменено</th><th></th></tr></thead><tbody>';
-        foreach($posts as $p) echo '<tr id="post-'.(int)$p['id'].'"><td><a class="post-title" href="/admin.php?view=edit&amp;id='.$p['id'].'">'.h($p['title'] ?: 'Пока без названия').'</a><p class="post-excerpt">'.h(mb_substr(body_plain($p['body']),0,120)).'</p>'.(!empty($p['category_title'])?'<span class="category-chip">'.h($p['category_title']).'</span>':'').'</td><td><span class="status-chip '.$p['status'].'">'.($p['status']==='draft'?'Не опубликован':'На сайте').'</span></td><td>'.telegram_list_indicator($p).'</td><td>'.h(date('d.m.Y H:i',strtotime($p['updated_at']))).'</td><td><a class="btn-edit" href="/admin.php?view=edit&amp;id='.$p['id'].'">Открыть в редакторе</a>'.post_management_controls($p,$scope,$categorySlug).'</td></tr>';
+        foreach($posts as $p) echo '<tr id="post-'.(int)$p['id'].'"><td><a class="post-title" href="/admin.php?view=edit&amp;id='.$p['id'].h(telegram_channel_query()).'">'.h($p['title'] ?: 'Пока без названия').'</a><p class="post-excerpt">'.h(mb_substr(body_plain($p['body']),0,120)).'</p>'.(!empty($p['category_title'])?'<span class="category-chip">'.h($p['category_title']).'</span>':'').'</td><td><span class="status-chip '.$p['status'].'">'.($p['status']==='draft'?'Не опубликован':'На сайте').'</span></td><td>'.telegram_list_indicator($p).'</td><td>'.h(date('d.m.Y H:i',strtotime($p['updated_at']))).'</td><td><a class="btn-edit" href="/admin.php?view=edit&amp;id='.$p['id'].h(telegram_channel_query()).'">Открыть в редакторе</a>'.post_management_controls($p,$scope,$categorySlug).'</td></tr>';
         echo '</tbody></table></div>';
     }
 
