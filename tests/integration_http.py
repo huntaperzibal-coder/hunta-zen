@@ -41,7 +41,7 @@ with tempfile.TemporaryDirectory(prefix='hunta-http-') as tmp:
             assert 'theme-label' not in public_head and 'theme-icon' not in public_head,'theme toggle has no visible text or emoji'
             for icon in ['sun','moon']:
                 code,svg,_=request('/assets/icons/'+icon+'.svg');assert code==200 and '<svg' in svg,'copied theme icon served'
-            assert '/assets/js/reader-theme.js?v=2' in public_head and '/assets/css/reader.css?v=13' in public_head,'theme assets cache refreshed'
+            assert '/assets/js/reader-theme.js?v=2' in public_head and '/assets/css/reader.css?v=14' in public_head,'theme assets cache refreshed'
             assert '/assets/brand/dialogue.svg?v=2' in public_head and '/assets/brand/dao-admin.svg' not in public_head,'separate site identity'
             for path,heading in [('/admin.php?view=settings','Настройки'),('/admin.php?view=telegram','Telegram'),('/admin.php?view=service','Обслуживание'),('/admin.php?view=github','GitHub и резервные копии')]:
                 code,panel,_=request(path);assert code==200 and heading in panel,'navigation '+path
@@ -163,8 +163,8 @@ with tempfile.TemporaryDirectory(prefix='hunta-http-') as tmp:
             assert 'data-service-toggle' in home and '<dialog id="reader-services"' in home and 'reader-services.js?v=1' in home,'hamburger and native service dialog'
             assert home.count('https://t.me/example_channel')==1,'channel link lives in service menu without header duplicate'
             assert '<span>Читать в Telegram</span><span aria-hidden="true">↗</span>' not in home,'Telegram menu has no external-link arrow'
-            assert 'class="service-crosslink"' in request('/support.php',opener=anonymous)[1] and 'познакомиться с автором</a>' in request('/support.php',opener=anonymous)[1],'support links to author within prose'
-            assert 'поддержать их продолжение</a>' in request('/feedback.php',opener=anonymous)[1],'author links to support within prose'
+            assert '<a href="/feedback.php">Автор</a>' in request('/support.php',opener=anonymous)[1] and 'познакомиться с автором</a>' not in request('/support.php',opener=anonymous)[1],'support links to author in compact top navigation'
+            assert '<span>Поддержать</span></a></nav><h1>' in request('/feedback.php',opener=anonymous)[1] and 'поддержать их продолжение</a>' not in request('/feedback.php',opener=anonymous)[1],'author has heart support link in top navigation without prose duplication'
 
             assert 'В этой ленте' in home and 'category-tabs' in home,'reading navigation remains in place'
             assert 'href="https://example.test/donate"' in request('/support.php',opener=anonymous)[1]

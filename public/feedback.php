@@ -11,7 +11,7 @@ if($_SERVER['REQUEST_METHOD']==='POST'){
     catch(RuntimeException $e){http_response_code(422);$error=$e->getMessage();}
 }
 page_start('Познакомиться — '.setting('title'));
-echo '<section class="reader-service-page author-page"><a class="back" href="/">← К историям</a><h1>Познакомиться</h1>';
+echo '<section class="reader-service-page author-page"><nav class="reader-page-nav" aria-label="Навигация по разделам"><a class="back" href="/">← К историям</a><a href="/support.php">'.dao_icon('heart').'<span>Поддержать</span></a></nav><h1>Познакомиться</h1>';
 $photo=reader_public_photo('author_photo');
 if($photo!=='')echo '<figure class="author-portrait"><a class="story-image-link" data-lightbox-image href="'.h(photo_url($photo)).'" aria-label="Открыть фото автора полностью"><img src="'.h(photo_url($photo)).'" alt="'.h(setting('author_name','Hunta')).'" decoding="async"></a></figure>';
 echo '<section class="author-message" id="message"><h2>Обратная связь</h2>';
@@ -23,6 +23,6 @@ else{
     $form=$existing&&$existing['issued']>=time()-3600&&hash_equals($existing['digest'],hash('sha256',reader_consent_text()))?['nonce'=>$nonce]+$existing:reader_feedback_issue();
     echo '<form method="post" action="/feedback.php#message">'.csrf().'<input type="hidden" name="submission" value="'.h($form['nonce']).'"><input type="hidden" name="consent_digest" value="'.h($form['digest']).'"><label for="feedback-message">Сообщение</label><textarea id="feedback-message" name="message" rows="4" maxlength="5000" required placeholder="Твоё сообщение…">'.h((string)($_POST['message']??'')).'</textarea><label for="feedback-contact">Контакт для ответа · необязательно</label><input id="feedback-contact" name="contact" maxlength="250" value="'.h((string)($_POST['contact']??'')).'" placeholder="@telegram или почта"><div class="reader-feedback-trap" aria-hidden="true"><label>Оставь пустым<input name="website" tabindex="-1" autocomplete="off"></label></div><div class="feedback-check"><label for="feedback-answer">Сколько будет '.h($form['question']).'?</label><input id="feedback-answer" name="answer" inputmode="numeric" pattern="[0-9]{1,2}" maxlength="2" autocomplete="off" required></div><label class="feedback-consent"><input type="checkbox" name="consent" value="1" required><span>Даю <a href="/consent.php" target="_blank" rel="noopener">согласие на обработку сообщения и указанного контакта</a> для ответа.</span></label><p class="hint feedback-privacy"><a href="/privacy.php" target="_blank" rel="noopener">Политика обработки данных</a>. </p><button class="reader-primary-button" type="submit">Отправить '.dao_icon('mail').'</button></form>';
 }
-echo '</section><p class="service-crosslink">Если эти истории тебе близки, можно <a href="/support.php">поддержать их продолжение</a>.</p></section>';
+echo '</section></section>';
 if($photo!=='')echo '<dialog id="reader-lightbox" class="reader-lightbox" aria-label="Фото автора"><button type="button" class="lightbox-close" aria-label="Закрыть изображение">×</button><button type="button" class="lightbox-prev" aria-label="Предыдущее изображение" hidden>‹</button><div class="lightbox-stage"><img alt=""><p class="lightbox-caption"></p></div><button type="button" class="lightbox-next" aria-label="Следующее изображение" hidden>›</button></dialog><script src="/assets/js/reader-actions.js?v=4" defer></script>';
 page_end();
