@@ -128,4 +128,4 @@ function page_start(string $title, bool $admin=false, string $description='', st
 
     echo '<button class="theme-toggle" type="button" aria-label="Включить тёмную тему" aria-pressed="false" hidden></button></nav></header><main>';
 }
-function page_end(): void { global $ordaPageMode; if (isset($ordaPageMode)) { orda_page_end();return; } echo '</main>'.reader_service_dialog().'<footer>Место для мыслей, историй и разговоров. <a href="/privacy.php">Персональные данные</a></footer></body></html>'; }
+function page_end(): void { global $ordaPageMode; if (isset($ordaPageMode)) { orda_page_end();return; } echo '</main>'.reader_service_dialog().'<footer>© Hunta <a href="/privacy.php">Персональные данные</a></footer></body></html>'; }
