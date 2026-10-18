@@ -138,7 +138,7 @@ if ($view==='login') {
         telegram_editor($p,$delivery?:null);
         echo '</form>';
         illustration_editor($p);
-        echo '<script src="/assets/tinymce/tinymce.min.js?v=8.5.0" defer></script><script src="/assets/js/editor-clipboard.js?v=1" defer></script><script src="/assets/js/editor.js?v=16" defer></script>';
+        echo '<script src="/assets/tinymce/tinymce.min.js?v=8.5.0" defer></script><script src="/assets/js/editor-clipboard.js?v=1" defer></script><script src="/assets/js/video-preview.js?v=1" defer></script><script src="/assets/js/editor.js?v=17" defer></script>';
     }
 } elseif ($view==='illustrator') {
     illustration_settings_page();

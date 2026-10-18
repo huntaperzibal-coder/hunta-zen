@@ -159,7 +159,9 @@ function telegram_plan(array $p): array {
         $file=$storage.'/photos/'.$name;
         if(!is_file($file))throw new RuntimeException('Видео недоступно. Проверь его перед отправкой.');
         if(filesize($file)>50*1024*1024)throw new RuntimeException('Для сайта можно до 200 МБ, но Telegram принимает через бота видео до 50 МБ. Для отправки в канал уменьши ролик.');
-        $rich['media'][]=['id'=>$key,'media'=>['type'=>'video','media'=>'attach://'.$key]];
+        $media=['type'=>'video','media'=>'attach://'.$key]+video_mp4_metadata($file);
+        if(video_thumbnail_path($name)){$media['thumbnail']='attach://'.$key.'_thumb';$media['cover']='attach://'.$key.'_thumb';}
+        $rich['media'][]=['id'=>$key,'media'=>$media];
     }
     return [['kind'=>'text','ordinal'=>0,'rich_message'=>$rich,'photo'=>$photo,'videos'=>$videos]];
 }
@@ -224,7 +226,10 @@ function telegram_send(int $id,?callable $transport=null,?array $snapshot=null):
                 $payload['rich_message']=$part['rich_message'];
                 if($message)$payload['message_id']=(int)$message;
                 if($part['photo']!=='')$payload['picture']=new CURLFile($storage.'/photos/'.$part['photo'],mime_content_type($storage.'/photos/'.$part['photo']),'illustration.'.pathinfo($part['photo'],PATHINFO_EXTENSION));
-                foreach($part['videos']??[] as $name=>$key)$payload[$key]=new CURLFile($storage.'/photos/'.$name,'video/mp4',$key.'.mp4');
+                foreach($part['videos']??[] as $name=>$key){
+                    $payload[$key]=new CURLFile($storage.'/photos/'.$name,'video/mp4',$key.'.mp4');
+                    $thumb=video_thumbnail_path($name);if($thumb)$payload[$key.'_thumb']=new CURLFile($thumb,'image/jpeg',$key.'.jpg');
+                }
             }
             $db->prepare("INSERT INTO telegram_parts(post_id,channel,kind,ordinal,message_id,state,operation) VALUES(?,?,?,?,?,'sending',?) ON CONFLICT(post_id,channel,kind,ordinal) DO UPDATE SET state='sending',operation=excluded.operation")->execute([$id,$channel,$part['kind'],$part['ordinal'],$message,$delete?'delete':'upsert']);
             try{$response=$transport?$transport($method,$payload):telegram_request($method,$payload);if(!is_array($response)||!isset($response['ok']))throw new RuntimeException('Invalid response');}

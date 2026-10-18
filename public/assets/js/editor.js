@@ -13,21 +13,36 @@
     status.textContent = 'Есть несохранённые изменения';
   }
   function syncBody() { if (editor && !editor.removed) form.elements.body.value = editor.getContent(); }
-  async function prepareBody() {
+  const videoPreviews = new Set();
+  async function prepareBody(requirePreview = false) {
     if (activeUploads.size) await Promise.all([...activeUploads]);
     if (editor && !editor.removed) {
       const results = await editor.uploadImages();
       if (results.some(result => result.status === false)) throw Error('Не все фото загрузились. Дождись загрузки или удали неудачное фото.');
       syncBody();
     }
+    // Existing clips are prepared too, so re-uploading the original is unnecessary.
+    const content = /<video\b/i.test(form.elements.body.value) ? new DOMParser().parseFromString(form.elements.body.value, 'text/html') : null;
+    for (const video of content?.querySelectorAll('video[src]') || []) {
+      const url = new URL(video.getAttribute('src'), location.href);
+      const name = url.searchParams.get('file');
+      if (url.origin !== location.origin || url.pathname !== '/media.php' || !/^[a-f0-9]{32}\.mp4$/.test(name || '') || videoPreviews.has(name)) continue;
+      try {
+        status.textContent = 'Готовлю обложку видео…';
+        const blob = await window.daoVideoPreview(url.href);
+        await uploadFile(blob, () => {}, 'video_preview', name);
+        videoPreviews.add(name);
+      } catch (error) { if (requirePreview) throw error; }
+    }
     if (/src=["'](?:blob:|data:)/i.test(form.elements.body.value)) throw Error('Фото ещё загружается. Подожди перед сохранением.');
   }
-  function uploadFile(file, progress = () => {}, kind = 'photo') {
+  function uploadFile(file, progress = () => {}, kind = 'photo', videoName = '') {
     const task = new Promise((resolve, reject) => {
       const data = new FormData();
       data.append('csrf', form.elements.csrf.value);
       data.append('id', form.elements.id.value);
       data.append('kind', kind);
+      if (videoName) data.append('video_name', videoName);
       data.append('file', file, file.name || 'photo.png');
       const xhr = new XMLHttpRequest();
       xhr.open('POST', '/editor-upload.php');
@@ -244,7 +259,7 @@
     if (busy || !pendingSubmit) return;
     const button = pendingSubmit; pendingSubmit = null; busy = true;
     try {
-      await prepareBody();
+      await prepareBody((button.value || '').startsWith('telegram') && button.value !== 'telegram_cancel');
       if (['telegram_schedule', 'telegram_cancel'].includes(button.value)) { await updateTelegram(button); busy = false; if (pendingSubmit && !stopped) submitPending(); return; }
       // Leave the original submit event before replaying it. Browsers ignore
       // requestSubmit during that event when uploadImages resolves immediately.

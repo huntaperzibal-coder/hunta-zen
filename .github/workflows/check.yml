@@ -16,6 +16,7 @@ jobs:
       - run: php tests/reader_feedback.php
       - run: php tests/database_backup.php
       - run: php tests/core.php
+      - run: php tests/video.php
       - run: php tests/telegram.php
       - run: php tests/auth.php
       - run: php tests/rich_text.php
@@ -35,6 +36,7 @@ jobs:
       - run: node --check public/assets/js/reader-services.js
       - run: node --check public/assets/js/github-hub.js
       - run: node --check public/assets/js/author-settings.js
+      - run: node --check public/assets/js/video-preview.js
       - run: node --check public/assets/js/editor.js
       - run: node tests/editor_confirm.cjs
       - run: node --check public/assets/js/illustrator.js

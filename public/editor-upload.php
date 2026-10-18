@@ -9,6 +9,10 @@ session_open();
 if (!hash_equals($_SESSION['csrf'],(string)($_POST['csrf']??''))) { http_response_code(403);echo json_encode(['error'=>'Сессия формы устарела.']);exit; }
 try {
     post((int)($_POST['id']??0));
+    if(($_POST['kind']??'')==='video_preview'){
+        $name=(string)($_POST['video_name']??'');video_thumbnail_upload($name,$_FILES['file']??[]);
+        echo json_encode(['location'=>photo_url($name)]);exit;
+    }
     $name=($_POST['kind']??'')==='video'?video_upload($_FILES['file']??[]):photo_upload($_FILES['file']??[]);
     echo json_encode(['location'=>photo_url($name)],JSON_UNESCAPED_SLASHES);
 } catch (Throwable $e) {

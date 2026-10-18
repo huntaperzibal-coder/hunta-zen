@@ -28,11 +28,14 @@ try{
     $db->prepare('UPDATE posts SET body=? WHERE id=?')->execute(['Коротко',$p['id']]);$calls=[];telegram_send($p['id'],$mock);tg_assert(in_array('deleteMessage',array_column($calls,0),true),'legacy extra photo and text messages removed only after rich edit succeeds');
 
     $video=str_repeat('b',32).'.mp4';file_put_contents($dir.'/photos/'.$video,'test-only-mp4');
+    file_put_contents($dir.'/photos/'.$video.'.thumb.jpg','test-only-jpeg');
     $vp=tg_post('video',DAO_RICH_PREFIX.'<p>До</p><video src="'.photo_url($video).'" controls></video><p>После</p>');
     $calls=[];telegram_send($vp['id'],$mock);
     tg_assert(count($calls)===1&&$calls[0][0]==='sendRichMessage'&&$calls[0][1]['video0'] instanceof CURLFile,'video and text uploaded as one rich message');
     $vhtml=$calls[0][1]['rich_message']['html'];tg_assert(strpos($vhtml,'До')<strpos($vhtml,'tg://video?id=video0')&&strpos($vhtml,'tg://video?id=video0')<strpos($vhtml,'После'),'video keeps position between paragraphs');
     tg_assert($calls[0][1]['rich_message']['media'][0]['media']['type']==='video','Telegram attachment type is video');
+    $sentMedia=$calls[0][1]['rich_message']['media'][0]['media'];
+    tg_assert($sentMedia['thumbnail']==='attach://video0_thumb'&&$sentMedia['cover']==='attach://video0_thumb'&&$calls[0][1]['video0_thumb'] instanceof CURLFile,'video thumbnail and visible cover attached in same rich message');
     telegram_schedule_post($vp['id'],date('Y-m-d\TH:i',time()+3600));
     $db->prepare('UPDATE posts SET body=? WHERE id=?')->execute(['Изменено',$vp['id']]);$db->exec("UPDATE telegram_schedule SET due_at=0 WHERE state='scheduled'");$calls=[];
     telegram_run_due($mock);tg_assert(count($calls)===1&&isset($calls[0][1]['video0']),'scheduled snapshot retains video after text edits');
