@@ -45,7 +45,73 @@ printf 'Копия базы сохранена: %s\n' "$zen_backup_file"
 )
 SHELL;
     $download=str_replace(['__SSH__','__REMOTE__'],[$ssh,escapeshellarg($remote)],$download);
+    github_command_card('Полный архив сайта на сервере','НА СЕРВЕРЕ','Код, согласованная база, фотографии, видео, остальные материалы и настройки. Сохраняется в '.database_backup_directory().'. Старые бэкапы, история Git и журналы внутрь не включаются.',$cd.$php.' tools/backup_site.php');
+    $fullRemote=$php.' '.escapeshellarg($root.'/tools/backup_site.php').' --download';
+    $fullDownload=<<<'SHELL'
+(
+set -eu
+umask 077
+zen_archive_dir="$HOME/hunta-zen-backups"
+mkdir -p "$zen_archive_dir"
+zen_archive_file="$zen_archive_dir/zen_site_$(date +%Y-%m-%d_%H-%M-%S)_$$.tar.gz"
+zen_archive_part="$zen_archive_file.part"
+trap 'rm -f "$zen_archive_part"' EXIT
+__SSH__ __REMOTE__ > "$zen_archive_part"
+python3 - "$zen_archive_part" <<'PYTHON'
+import gzip, hashlib, json, sqlite3, sys, tarfile, tempfile
+from pathlib import Path
+seen = {}; manifest = None; database = None
+with tempfile.TemporaryDirectory(prefix='zen-check-') as check_dir:
+    with gzip.open(sys.argv[1], 'rb') as compressed:
+        with tarfile.open(fileobj=compressed, mode='r|') as archive:
+            for item in archive:
+                if not item.isfile():
+                    continue
+                stream = archive.extractfile(item)
+                if item.name == 'backup-manifest.json':
+                    if item.size > 16 * 1024 * 1024:
+                        raise SystemExit('Слишком большой список файлов')
+                    manifest = json.load(stream)
+                    continue
+                digest = hashlib.sha256(); total = 0
+                if item.name == 'data/blog.sqlite':
+                    database = Path(check_dir) / 'blog.sqlite'
+                    target = database.open('wb')
+                else:
+                    target = None
+                try:
+                    while True:
+                        chunk = stream.read(1024 * 1024)
+                        if not chunk:
+                            break
+                        digest.update(chunk); total += len(chunk)
+                        if target:
+                            target.write(chunk)
+                finally:
+                    if target:
+                        target.close()
+                seen[item.name] = {'size': total, 'sha256': digest.hexdigest()}
+        while compressed.read(1024 * 1024):
+            pass
+    required = {'site/public/index.php', 'data/blog.sqlite', 'configuration/config.php'}
+    if not manifest or not required.issubset(seen) or not database:
+        raise SystemExit('Архив неполный')
+    for name, expected in manifest['files'].items():
+        if seen.get(name) != expected:
+            raise SystemExit('Не прошла проверка файла: ' + name)
+    with sqlite3.connect(database.as_uri() + '?mode=ro', uri=True) as db:
+        if db.execute('PRAGMA integrity_check').fetchone()[0] != 'ok':
+            raise SystemExit('Не прошла проверка базы')
+        db.execute('SELECT count(*) FROM posts').fetchone()
+print('Проверены архив, контрольные суммы файлов и целостность базы')
+PYTHON
+mv "$zen_archive_part" "$zen_archive_file"
+printf 'Полный сайт сохранён: %s\n' "$zen_archive_file"
+)
+SHELL;
+    $fullDownload=str_replace(['__SSH__','__REMOTE__'],[$ssh,escapeshellarg($fullRemote)],$fullDownload);
+    github_command_card('Скачать ВЕСЬ САЙТ на компьютер','НА КОМПЬЮТЕРЕ','Основная команда для полной копии. Архив .tar.gz попадёт в ~/hunta-zen-backups. Внутри: код, база, фото, видео, все приватные материалы и настройки. Проверяются SHA-256 файлов и SQLite. Нужны SSH и Python 3; пароль вводится в терминале.',$fullDownload);
     github_command_card('Скачать базу на компьютер','НА КОМПЬЮТЕРЕ','Запускай в домашнем терминале, а не после входа по SSH. Команда создаёт новую проверенную копию на сервере, скачивает её в ~/hunta-zen-backups и проверяет SQLite через Python 3. Рабочая база не копируется напрямую.',$download);
     github_command_card('Проверить планировщик Telegram','НА СЕРВЕРЕ','Состояние очереди, последнего запуска и связь с ботом. Посты не отправляются.',$cd.$php.' tools/telegram_diagnose.php');
-    echo '<p class="hint">Скачанная база содержит черновики, личные сообщения и настройки. Храни её у себя. Облачный Backblaze B2 здесь пока не подключён; настройки другого проекта не используются.</p><script src="/assets/js/github-hub.js?v=1" defer></script>';
+    echo '<p class="hint">Полный архив содержит также пароли и токены. Храни его приватно. Скачанная база содержит черновики, личные сообщения и настройки. Храни её у себя. Облачный Backblaze B2 здесь пока не подключён; настройки другого проекта не используются.</p><script src="/assets/js/github-hub.js?v=1" defer></script>';
 }

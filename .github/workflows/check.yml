@@ -21,6 +21,7 @@ jobs:
       - run: php tests/categories.php
       - run: php tests/illustrator.php
       - run: php tests/illustrator_memory.php
+      - run: python3 tests/site_archive.py
       - run: python3 tests/backup_download.py
       - run: python3 tests/integration_http.py
       - run: python3 tests/sync.py

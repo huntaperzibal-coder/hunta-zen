@@ -51,6 +51,7 @@ with tempfile.TemporaryDirectory(prefix='hunta-http-') as tmp:
             assert 'GitHub и резервные копии' not in request('/admin.php?view=github',opener=urllib.request.build_opener())[1],'GitHub commands need login'
             assert request('/assets/js/github-hub.js')[0]==200,'command clipboard script served'
             assert request('/tools/backup_database.php')[0]==404,'backup CLI not exposed to web'
+            assert 'Скачать ВЕСЬ САЙТ на компьютер' in github and 'tools/backup_site.php' in github,'full website download command available'
             _,html,url=request('/admin.php',{'action':'new','csrf':csrf});pid=urllib.parse.parse_qs(urllib.parse.urlparse(url).query)['id'][0]
             revision=re.search(r'name="revision" value="(\d+)"',html)[1]
             data={'action':'save','csrf':csrf,'id':pid,'revision':revision,'title':'История <script>x</script>','body':'Очень личный черновик','excerpt':'','telegram_text':''}
