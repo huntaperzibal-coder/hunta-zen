@@ -27,7 +27,7 @@ function telegram_schedule_post(int $id,string $value): void {
     if(empty($config['telegram_token'])||empty($config['telegram_channel']))throw new RuntimeException('Сначала подключи Telegram.');
     $date=DateTimeImmutable::createFromFormat('!Y-m-d\TH:i',$value,new DateTimeZone('Asia/Novosibirsk'));
     if(!$date || $date->format('Y-m-d\TH:i')!==$value || $date->getTimestamp()<=time()+30)throw new RuntimeException('Выбери будущее время, минимум через минуту. Часовой пояс — Новосибирск (UTC+7).');
-    $p=post($id);if($p['status']!=='published')throw new RuntimeException('Сначала опубликуй запись на сайте.');telegram_plan($p);
+    $p=post($id);if(trim($p['title'])===''||trim(body_plain($p['body']))==='')throw new RuntimeException('Для отправки нужны заголовок и текст.');telegram_plan($p);
     $q=$db->prepare("SELECT 1 FROM telegram_deliveries WHERE post_id=? AND channel=? AND state IN ('sending','unknown')");$q->execute([$id,$config['telegram_channel']]);
     if($q->fetchColumn())throw new RuntimeException('Сначала проверь результат предыдущей отправки.');
     $db->beginTransaction();

@@ -47,7 +47,7 @@ function telegram_document(array $p): array {
         };
         foreach($doc->getElementsByTagName('body')->item(0)->childNodes as $node)$walk($node);
     }
-    $text=rtrim($text)."\n\n".rtrim($config['site_url'],'/').'/?p='.rawurlencode($p['slug']);
+    $text=rtrim($text).($p['status']==='published'?"\n\n".rtrim($config['site_url'],'/').'/?p='.rawurlencode($p['slug']):'');
     $entities=array_values(array_filter($entities,fn($e)=>$e['length']>0 && $e['offset']+$e['length']<=telegram_units($text)));
     // Telegram forbids bold/italic/link ranges overlapping code/pre ranges.
     $codeRanges=array_filter($entities,fn($e)=>in_array($e['type'],['code','pre'],true));
@@ -138,7 +138,8 @@ function telegram_plan(array $p): array {
     $videos=[];$story=telegram_rich_body($p['body'],$videos);
     $html.=trim((string)$p['telegram_text'])!==''?'<p>'.str_replace("\n",'<br>',h(trim($p['telegram_text']))).'</p>':$story;
     if(trim((string)$p['telegram_text'])!=='')foreach($videos as $name=>$key)$html.='<video src="tg://video?id='.$key.'"></video>';
-    $url=rtrim($config['site_url'],'/').'/?p='.rawurlencode($p['slug']);$html.='<blockquote><p><b>Гена и Винни</b></p><p><a href="'.h($url).'">🌐 Читать на сайте</a></p></blockquote>';
+    $url=rtrim($config['site_url'],'/').'/?p='.rawurlencode($p['slug']);
+    $html.='<blockquote><p><b>Гена и Винни</b></p>'.($p['status']==='published'?'<p><a href="'.h($url).'">🌐 Читать на сайте</a></p>':'').'</blockquote>';
     // Reject oversized messages before any network call; never truncate or split implicitly.
     if(mb_strlen(html_entity_decode(strip_tags($html),ENT_QUOTES|ENT_HTML5,'UTF-8'))>32768)throw new RuntimeException('Рассказ больше лимита одного составного сообщения Telegram (32768 символов). Сократи текст для канала.');
     $doc=new DOMDocument('1.0','UTF-8');$previous=libxml_use_internal_errors(true);
@@ -207,8 +208,9 @@ function telegram_send(int $id,?callable $transport=null,?array $snapshot=null):
     $lock=fopen($storage.'/telegram.lock','c');
     if(!$lock||!flock($lock,LOCK_EX|LOCK_NB))throw new RuntimeException('Уже идёт отправка. Подожди.');
     try{
-        $current=post($id);if($current['status']!=='published')throw new RuntimeException('Сначала опубликуй запись на сайте.');
-        $p=$snapshot??$current;$plan=telegram_plan($p);$channel=$config['telegram_channel'];
+        $current=post($id);
+        if(trim($current['title'])===''||trim(body_plain($current['body']))==='')throw new RuntimeException('Для отправки нужны заголовок и текст.');
+        $p=$snapshot??$current;$p['status']=$current['status'];$p['slug']=$current['slug'];$plan=telegram_plan($p);$channel=$config['telegram_channel'];
         $q=$db->prepare('SELECT * FROM telegram_deliveries WHERE post_id=? AND channel=?');$q->execute([$id,$channel]);$delivery=$q->fetch();
         if($delivery && (in_array($delivery['state'],['sending','unknown'],true)||telegram_invalid_message($delivery['error'])))throw new RuntimeException('Результат прошлой отправки неизвестен. Проверь канал и укажи результат ниже.');
         // Adopt the original single text delivery without duplicating it after an upgrade.

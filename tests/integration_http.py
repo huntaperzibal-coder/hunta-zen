@@ -4,7 +4,7 @@ ROOT=pathlib.Path(__file__).resolve().parents[1]
 PHP=os.environ.get('PHP_BIN','php')
 with tempfile.TemporaryDirectory(prefix='hunta-http-') as tmp:
     storage=pathlib.Path(tmp);(storage/'photos').mkdir()
-    config={'storage':tmp,'site_url':'https://example.test','login':'author','password_hash':subprocess.check_output([PHP,'-r',"echo password_hash('test-password-only',PASSWORD_DEFAULT);"],text=True),'telegram_token':'','telegram_channel':'-100100'}
+    config={'storage':tmp,'database_backup_dir':tmp+'/private-db-copies','site_url':'https://example.test','login':'author','password_hash':subprocess.check_output([PHP,'-r',"echo password_hash('test-password-only',PASSWORD_DEFAULT);"],text=True),'telegram_token':'','telegram_channel':'-100100'}
     (storage/'config.php').write_text('<?php return json_decode('+repr(json.dumps(config))+',true);')
     env={**os.environ,'HUNTA_CONFIG':str(storage/'config.php')}
     subprocess.run([PHP,str(ROOT/'tools/migrate.php')],env=env,check=True,capture_output=True)
@@ -250,6 +250,27 @@ with tempfile.TemporaryDirectory(prefix='hunta-http-') as tmp:
             copies=list((storage/'backups').iterdir());assert len(copies)==1 and (copies[0]/'photos'/photo).exists(),'backup photos'
             assert (copies[0]/'photos'/video).read_bytes()==mp4,'verified backup includes video'
             assert (copies[0]/'photos'/(video+'.thumb.jpg')).read_bytes()==preview,'verified backup includes video cover'
+            # List placement filters and independent management; no Telegram API calls.
+            with sqlite3.connect(storage/'blog.sqlite') as records:
+                ids=[]
+                for slug,state,tg in [('local-hub','draft',False),('site-hub','published',False),('tg-hub','draft',True),('both-hub','published',True)]:
+                    row=records.execute("INSERT INTO posts(slug,title,body,status,created_at,updated_at) VALUES(?,?,?,?,?,?)",(slug,slug,'Текст',state,'2026-10-18','2026-10-18'));ids.append(row.lastrowid)
+                    if tg:records.execute("INSERT INTO telegram_deliveries(post_id,channel,message_id,state,updated_at) VALUES(?,'-100100',?,'sent',datetime('now'))",(row.lastrowid,1000+row.lastrowid))
+            def list_ids(scope):
+                panel=request('/admin.php?scope='+scope)[1]
+                return {int(n) for n in re.findall(r'<tr id="post-(\d+)"',panel)},panel
+            for scope,indices in [('',[0,1,2,3]),('site',[1,3]),('telegram',[2,3]),('both',[3]),('local',[0])]:
+                found,panel=list_ids(scope);assert found.intersection(ids)=={ids[n] for n in indices},('placement filter',scope)
+                assert 'Удалить пост полностью' in panel and 'data-confirm=' in panel,'management uses confirmation controls'
+            manage={'action':'post_manage','id':ids[0],'revision':1,'command':'site_publish','csrf':csrf,'list_scope':'site'}
+            assert request('/admin.php',{**manage,'csrf':'bad'})[0]==403,'list management requires CSRF'
+            assert 'Действие выполнено' in request('/admin.php',manage)[1],'list publication succeeds'
+            assert 'Пост изменён' in request('/admin.php',{**manage,'command':'post_delete'})[1],'stale list cannot delete changed post'
+            request('/admin.php',{**manage,'revision':2,'command':'site_hide'})
+            with sqlite3.connect(storage/'blog.sqlite') as records:assert records.execute('SELECT status FROM posts WHERE id=?',[ids[0]]).fetchone()[0]=='draft','hiding returns to system without deleting'
+            request('/admin.php',{**manage,'revision':3,'command':'post_delete','list_scope':'local'})
+            with sqlite3.connect(storage/'blog.sqlite') as records:assert records.execute('SELECT 1 FROM posts WHERE id=?',[ids[0]]).fetchone() is None,'full deletion removes unposted system record'
+            assert list((storage/'private-db-copies').glob('*.sqlite')),'full deletion has verified recovery snapshot'
             print('OK: HTTP login, CSRF, drafts, upload, private media, publishing, XSS, conflicts, backup')
         finally:
             server.terminate();server.wait(timeout=5)

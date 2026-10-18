@@ -17,6 +17,7 @@ jobs:
       - run: php tests/database_backup.php
       - run: php tests/core.php
       - run: php tests/video.php
+      - run: php tests/post_management.php
       - run: php tests/telegram.php
       - run: php tests/auth.php
       - run: php tests/rich_text.php

@@ -42,7 +42,7 @@ function telegram_editor(array $p,?array $delivery): void {
     if($delivery && (in_array($delivery['state'],['unknown','sending'],true)||telegram_invalid_message($delivery['error']))){
         echo '<p class="hint">Проверь этот пост в канале. Если он есть — укажи последнее число из ссылки на сообщение. Если удалён или отсутствует — укажи 0. Это только исправит привязку; публикация начнётся после отдельного нажатия отправки.</p><label><input type="checkbox" name="checked_channel" value="1"> Я проверил канал</label><label>Номер сообщения из ссылки; 0, если его нет<input class="user-input" type="number" name="message_id" min="0" value="0"></label><button class="btn-secondary" name="action" value="resolve">Сохранить результат проверки</button>';
     }else{
-        $disabled=$p['status']!=='published'||$running?' disabled':'';
+        $disabled=$running?' disabled':'';
         echo '<div class="tg-schedule-controls"><label>Дата и время отправки (Новосибирск, UTC+7)<input class="user-input" type="datetime-local" name="telegram_due" value="'.h($due).'"'.$disabled.'></label><button type="submit" class="btn-main" name="action" value="telegram_schedule"'.$disabled.'>'.($pending?'Обновить отложенную отправку':'Запланировать отправку').'</button><p class="hint">Отправится сохранённая сейчас версия текста. Чтобы учесть новые правки или изменить время, обнови отложенную отправку.</p></div><details><summary>Отправить сейчас</summary><button type="submit" class="btn-secondary" name="action" value="telegram"'.$disabled.'>'.(($delivery['state']??'')==='sent'?'Обновить публикацию в Telegram сейчас':'Отправить в Telegram сейчас').'</button><p class="hint">Сразу отправит этот пост и отменит его ожидающую отправку по расписанию.</p></details>';
     }
     if($history){
@@ -62,7 +62,7 @@ function telegram_page(): void {
     echo '<div class="table-scroll"><table class="index-table"><thead><tr><th>Запись</th><th>Когда (UTC+7)</th><th>Состояние</th></tr></thead><tbody>';
     foreach($q as $job)echo '<tr><td><a href="/admin.php?view=edit&amp;id='.(int)$job['post_id'].'#telegram">'.h($job['title']).'</a><br><small>'.h($job['channel']).'</small></td><td>'.h(date('d.m.Y H:i',(int)$job['due_at'])).'</td><td>'.h(telegram_status_label($job['state'])).($job['error']?'<br>'.h($job['error']):'').'</td></tr>';
     echo '</tbody></table></div><h2>Записи в канале</h2><div class="table-scroll"><table class="index-table"><thead><tr><th>Запись</th><th>В выбранном канале</th><th></th></tr></thead><tbody>';
-    $q=$db->prepare("SELECT p.*,d.state FROM posts p LEFT JOIN telegram_deliveries d ON d.post_id=p.id AND d.channel=? WHERE p.status='published' ORDER BY p.published_at DESC LIMIT 100");$q->execute([$channel]);
+    $q=$db->prepare("SELECT p.*,d.state FROM posts p LEFT JOIN telegram_deliveries d ON d.post_id=p.id AND d.channel=? WHERE trim(p.title)<>'' ORDER BY p.published_at DESC LIMIT 100");$q->execute([$channel]);
     foreach($q as $row)echo '<tr><td>'.h($row['title']).'</td><td>'.h(telegram_status_label((string)($row['state']??''))).'</td><td><a class="btn-edit" href="/admin.php?view=edit&amp;id='.(int)$row['id'].'#telegram">Подготовить отправку</a></td></tr>';
     echo '</tbody></table></div>';
 }

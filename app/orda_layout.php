@@ -7,14 +7,15 @@ declare(strict_types=1);
 function orda_page_start(string $title): void {
     global $ordaPageMode;
     $login=!authenticated();$ordaPageMode=$login?'auth':'shell';
-    echo '<!doctype html><html lang="ru"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex,nofollow"><title>'.h($title).'</title>'.dao_brand_head(true).'<link rel="stylesheet" href="/styles_core/adminka/stili_orda.css?v=1"><link rel="stylesheet" href="/assets/css/orda_blog.css?v=14"><link rel="stylesheet" href="/assets/css/reading-type.css?v=2"></head><body class="'.($login?'auth':'orda-shell').'">';
+    echo '<!doctype html><html lang="ru"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex,nofollow"><title>'.h($title).'</title>'.dao_brand_head(true).'<link rel="stylesheet" href="/styles_core/adminka/stili_orda.css?v=1"><link rel="stylesheet" href="/assets/css/orda_blog.css?v=15"><link rel="stylesheet" href="/assets/css/reading-type.css?v=2"></head><body class="'.($login?'auth':'orda-shell').'">';
     if ($login) { echo '<div class="auth-box">';return; }
     $view=(string)($_GET['view']??'list');$status=(string)($_GET['status']??'');
+    $status=match((string)($_GET['scope']??'')){'local'=>'draft','site'=>'published',default=>$status};
     $current=match($view){'edit','preview'=>'list','illustrator'=>'illustrator','author'=>'author','github'=>'github','settings'=>'settings','service'=>'service','telegram'=>'telegram',default=>$status ?: 'list'};
     $items=[
         ['id'=>'list','title'=>'Все записи','file'=>'/admin.php','icon'=>'stories'],
-        ['id'=>'draft','title'=>'Черновики и заметки','file'=>'/admin.php?status=draft','icon'=>'draft'],
-        ['id'=>'published','title'=>'На сайте','file'=>'/admin.php?status=published','icon'=>'published'],
+        ['id'=>'draft','title'=>'Только в системе','file'=>'/admin.php?scope=local','icon'=>'draft'],
+        ['id'=>'published','title'=>'На сайте','file'=>'/admin.php?scope=site','icon'=>'published'],
         ['id'=>'telegram','title'=>'Telegram','file'=>'/admin.php?view=telegram','icon'=>'telegram'],
         ['id'=>'illustrator','title'=>'Иллюстратор','file'=>'/admin.php?view=illustrator','icon'=>'draft'],
         ['id'=>'feedback','title'=>'Обратная связь','file'=>'/admin.php?view=feedback','icon'=>'mail'],

@@ -38,6 +38,7 @@ require_once __DIR__ . '/orda_layout.php';
 require_once __DIR__ . '/telegram.php';
 require_once __DIR__ . '/telegram_schedule.php';
 require_once __DIR__ . '/telegram_ui.php';
+require_once __DIR__ . '/post_management.php';
 require_once __DIR__ . '/illustrator_memory.php';
 require_once __DIR__ . '/illustrator.php';
 require_once __DIR__ . '/illustrator_ui.php';

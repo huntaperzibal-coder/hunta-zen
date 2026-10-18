@@ -28,6 +28,11 @@ if ($_SERVER['REQUEST_METHOD']==='POST') {
             if ($action==='author_settings') { reader_author_settings_save($_POST,$_FILES);redirect('/admin.php?view=author&saved=1#author-settings-status'); }
             if ($action==='feedback_delete') { $db->prepare('DELETE FROM reader_feedback WHERE id=?')->execute([(int)($_POST['message_id']??0)]);audit('feedback:delete');redirect('/admin.php?view=feedback'); }
             if ($action==='feedback_read') { $db->prepare('UPDATE reader_feedback SET read_at=? WHERE id=?')->execute([time(),(int)($_POST['message_id']??0)]);redirect('/admin.php?view=feedback'); }
+            if ($action==='post_manage') {
+                post_manage((int)($_POST['id']??0),(int)($_POST['revision']??0),(string)($_POST['command']??''));
+                $scope=(string)($_POST['list_scope']??'');if(!in_array($scope,['site','telegram','both','local'],true))$scope='';
+                redirect('/admin.php?'.http_build_query(array_filter(['scope'=>$scope,'category'=>(string)($_POST['list_category']??''),'managed'=>'1'])).'#post-'.(int)($_POST['id']??0));
+            }
             if ($action==='new') {
                 $stamp=now();$db->prepare('INSERT INTO posts(slug,created_at,updated_at) VALUES(?,?,?)')->execute(['draft-'.bin2hex(random_bytes(8)),$stamp,$stamp]);redirect('/admin.php?view=edit&id='.$db->lastInsertId());
             }
@@ -115,6 +120,7 @@ if ($_SERVER['REQUEST_METHOD']==='POST') {
 if (!authenticated()) $view='login'; else guard();
 page_start('Дао — '.setting('title'),true);
 if ($error && $view!=='author') echo '<div class="auth-error" role="alert">'.h($error).'</div>';
+if(isset($_GET['managed']))echo '<div class="auth-success" role="status">Действие выполнено.</div>';
 if (isset($_GET['saved']) && $view!=='author') echo '<div class="auth-success">Сохранено.</div>';
 if ($view==='login') {
     echo '<div class="auth-title">'.dao_icon('logo').'<span>Дао</span><small>'.h(setting('title')).'</small></div><form method="post">'.csrf().'<input type="hidden" name="action" value="login"><label class="sr-only" for="login">Логин</label><input type="text" id="login" class="auth-input" name="login" placeholder="Логин" autocomplete="username" required><div class="password-wrap"><label class="sr-only" for="password">Пароль</label><input id="password" class="auth-input" type="password" name="password" placeholder="Пароль" autocomplete="current-password" required><button type="button" class="pass-toggle" aria-label="Показать пароль" aria-pressed="false">'.dao_icon('eye').'</button></div><button type="submit" class="auth-btn">Войти</button></form>';
@@ -168,22 +174,33 @@ if ($view==='login') {
 } else {
     echo '<div class="section-head"><div><p class="eyebrow">Мастерская автора</p><h1>Мои истории</h1></div><form method="post">'.csrf().'<button type="submit" class="btn-main" name="action" value="new">＋ Написать</button></form></div>';
     $filter=(string)($_GET['status']??'');if (!in_array($filter,['draft','published'],true))$filter='';
-    $categorySlug=(string)($_GET['category']??'');$categorySuffix=$categorySlug!==''?'&amp;category='.h(rawurlencode($categorySlug)):'';
-    echo '<nav class="tabs"><a href="/admin.php'.($categorySlug!==''?'?category='.h(rawurlencode($categorySlug)):'').'">Все</a><a href="/admin.php?status=draft'.$categorySuffix.'">Черновики и заметки</a><a href="/admin.php?status=published'.$categorySuffix.'">На сайте</a></nav>';
+    $scope=(string)($_GET['scope']??'');if(!in_array($scope,['site','telegram','both','local'],true))$scope='';
+    $categorySlug=(string)($_GET['category']??'');
+    echo '<p class="hint">Все посты хранятся в системе. Сайт и Telegram — независимые места публикации.</p><nav class="tabs">';
+    foreach([''=>'Все в системе','site'=>'На сайте','telegram'=>'В Telegram','both'=>'Сайт + Telegram','local'=>'Только в системе'] as $key=>$title){
+        $query=http_build_query(array_filter(['scope'=>$key,'category'=>$categorySlug]));
+        echo '<a'.($scope===$key?' aria-current="page"':'').' href="/admin.php'.($query?'?'.h($query):'').'">'.h($title).'</a>';
+    }
+    echo '</nav>';
     $categorySlug=(string)($_GET['category']??'');$category=$categorySlug!==''?category_by_slug($categorySlug):null;
-    echo category_links('/admin.php',array_filter(['status'=>$filter,'category'=>$categorySlug],fn($v)=>$v!==''));
+    echo category_links('/admin.php',array_filter(['status'=>$filter,'scope'=>$scope,'category'=>$categorySlug],fn($v)=>$v!==''));
     $where=[];$params=[];
     if($filter){$where[]='p.status=?';$params[]=$filter;}
+    if($scope==='site')$where[]="p.status='published'";
+    if($scope==='telegram')$where[]="d.state='sent'";
+    if($scope==='both')$where[]="p.status='published' AND d.state='sent'";
+    if($scope==='local')$where[]="p.status='draft' AND d.state IS NULL";
     if($category){$where[]='pc.category_id=?';$params[]=$category['id'];}
     elseif($categorySlug!=='')$where[]='0=1';
     $channel=(string)($config['telegram_channel']??'');
     $q=$db->prepare('SELECT p.*,c.title AS category_title,d.state AS telegram_state,s.state AS telegram_schedule_state,s.due_at AS telegram_due_at FROM posts p LEFT JOIN post_categories pc ON pc.post_id=p.id LEFT JOIN categories c ON c.id=pc.category_id LEFT JOIN telegram_deliveries d ON d.post_id=p.id AND d.channel=? LEFT JOIN telegram_schedule s ON s.id=(SELECT max(ts.id) FROM telegram_schedule ts WHERE ts.post_id=p.id AND ts.channel=?)'.($where?' WHERE '.implode(' AND ',$where):'').' ORDER BY p.updated_at DESC LIMIT 100');$q->execute(array_merge([$channel,$channel],$params));$posts=$q->fetchAll();
     if (!$posts) echo '<div class="empty"><h2>Здесь начинается история</h2><p>Сохрани мысль в черновик. Возвращайся к ней, когда захочется.</p></div>';
     $counts=$db->query("SELECT COUNT(*) AS total,SUM(status='draft') AS drafts,SUM(status='published') AS published FROM posts")->fetch();
-    echo '<div class="index-stats"><div class="index-stat"><div class="index-stat-value">'.(int)$counts['total'].'</div><div class="index-stat-label">Всего</div></div><div class="index-stat"><div class="index-stat-value">'.(int)$counts['drafts'].'</div><div class="index-stat-label">Черновики</div></div><div class="index-stat"><div class="index-stat-value">'.(int)$counts['published'].'</div><div class="index-stat-label">На сайте</div></div></div>';
+    $tgCount=$db->prepare("SELECT COUNT(*) FROM telegram_deliveries WHERE channel=? AND state='sent'");$tgCount->execute([$channel]);$telegramCount=(int)$tgCount->fetchColumn();
+    echo '<div class="index-stats"><div class="index-stat"><div class="index-stat-value">'.(int)$counts['total'].'</div><div class="index-stat-label">В системе</div></div><div class="index-stat"><div class="index-stat-value">'.(int)$counts['drafts'].'</div><div class="index-stat-label">Не на сайте</div></div><div class="index-stat"><div class="index-stat-value">'.(int)$counts['published'].'</div><div class="index-stat-label">На сайте</div></div><div class="index-stat"><div class="index-stat-value">'.$telegramCount.'</div><div class="index-stat-label">В Telegram</div></div></div>';
     if ($posts) {
         echo '<div class="table-scroll"><table class="index-table"><thead><tr><th>Название</th><th>Сайт</th><th>Telegram</th><th>Изменено</th><th></th></tr></thead><tbody>';
-        foreach($posts as $p) echo '<tr><td><a class="post-title" href="/admin.php?view=edit&amp;id='.$p['id'].'">'.h($p['title'] ?: 'Пока без названия').'</a><p class="post-excerpt">'.h(mb_substr(body_plain($p['body']),0,120)).'</p>'.(!empty($p['category_title'])?'<span class="category-chip">'.h($p['category_title']).'</span>':'').'</td><td><span class="status-chip '.$p['status'].'">'.($p['status']==='draft'?'Черновик':'На сайте').'</span></td><td>'.telegram_list_indicator($p).'</td><td>'.h(date('d.m.Y H:i',strtotime($p['updated_at']))).'</td><td><a class="btn-edit" href="/admin.php?view=edit&amp;id='.$p['id'].'">Открыть в редакторе</a></td></tr>';
+        foreach($posts as $p) echo '<tr id="post-'.(int)$p['id'].'"><td><a class="post-title" href="/admin.php?view=edit&amp;id='.$p['id'].'">'.h($p['title'] ?: 'Пока без названия').'</a><p class="post-excerpt">'.h(mb_substr(body_plain($p['body']),0,120)).'</p>'.(!empty($p['category_title'])?'<span class="category-chip">'.h($p['category_title']).'</span>':'').'</td><td><span class="status-chip '.$p['status'].'">'.($p['status']==='draft'?'Не опубликован':'На сайте').'</span></td><td>'.telegram_list_indicator($p).'</td><td>'.h(date('d.m.Y H:i',strtotime($p['updated_at']))).'</td><td><a class="btn-edit" href="/admin.php?view=edit&amp;id='.$p['id'].'">Открыть в редакторе</a>'.post_management_controls($p,$scope,$categorySlug).'</td></tr>';
         echo '</tbody></table></div>';
     }
 
