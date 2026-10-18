@@ -46,3 +46,10 @@
 .blog>header{position:sticky;top:0;z-index:30;width:100%;max-width:none;height:var(--reader-header-height);min-height:var(--reader-header-height);padding-inline:max(22px,calc((100% - 1100px)/2 + 22px));background:var(--color-bg)}
 .reading-sidebar{top:calc(var(--reader-header-height) + 18px)}
 @media(max-width:760px){:root{--reader-header-height:64px}.blog>header{padding-inline:12px}}
+
+/* Quiet chapter endings: a round seal for Winnie, an angular one for Gena. */
+.blog .story-ending{display:flex;align-items:center;justify-content:center;gap:9px;height:28px;margin:25px auto 10px;color:var(--story-accent);opacity:.43;pointer-events:none;user-select:none}
+.story-ending::before,.story-ending::after{content:'';width:16px;height:1px;background:currentColor;opacity:.65}
+.story-ending-mark{display:grid;place-items:center;width:19px;height:19px;border:1px solid currentColor;border-radius:50%;flex-shrink:0}
+.story-ending-mark::before{content:'';width:3px;height:3px;border-radius:50%;background:currentColor}
+.story[data-line=gena] .story-ending-mark{width:15px;height:15px;border-radius:0;transform:rotate(45deg)}

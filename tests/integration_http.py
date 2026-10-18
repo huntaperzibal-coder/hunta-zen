@@ -41,7 +41,7 @@ with tempfile.TemporaryDirectory(prefix='hunta-http-') as tmp:
             assert 'theme-label' not in public_head and 'theme-icon' not in public_head,'theme toggle has no visible text or emoji'
             for icon in ['sun','moon']:
                 code,svg,_=request('/assets/icons/'+icon+'.svg');assert code==200 and '<svg' in svg,'copied theme icon served'
-            assert '/assets/js/reader-theme.js?v=2' in public_head and '/assets/css/reader.css?v=18' in public_head,'theme assets cache refreshed'
+            assert '/assets/js/reader-theme.js?v=2' in public_head and '/assets/css/reader.css?v=19' in public_head,'theme assets cache refreshed'
             assert '/assets/brand/dialogue.svg?v=2' in public_head and '/assets/brand/dao-admin.svg' not in public_head,'separate site identity'
             for path,heading in [('/admin.php?view=settings','Настройки'),('/admin.php?view=telegram','Telegram'),('/admin.php?view=service','Обслуживание'),('/admin.php?view=github','GitHub и резервные копии')]:
                 code,panel,_=request(path);assert code==200 and heading in panel,'navigation '+path

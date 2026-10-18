@@ -44,7 +44,7 @@ foreach($stories as $p){
     echo '</div>'.($current?'<h1>':'<h2><a href="/?p='.h(rawurlencode($p['slug'])).'">').h($p['title']).($current?'</h1>':'</a></h2>');
     if($current)echo '<p class="story-author"><a href="/feedback.php">'.h(setting('author_name','Hunta')).'</a></p>';
     if($p['cover'])echo '<a class="story-image-link" href="'.h(photo_url($p['cover'])).'" target="_blank" rel="noopener" aria-label="Открыть иллюстрацию полностью"><img loading="lazy" class="cover" src="'.h(photo_url($p['cover'])).'" alt="Иллюстрация к истории «'.h($p['title']).'»"></a>';
-    echo '<div class="prose">'.render_body($p['body']).'</div></article>';
+    echo '<div class="prose">'.render_body($p['body']).'</div><div class="story-ending" aria-hidden="true"><span class="story-ending-mark"></span></div></article>';
 }
 if(!$current){
     $suffix=$category?'&amp;category='.h(rawurlencode($category['slug'])):'';
