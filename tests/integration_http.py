@@ -60,7 +60,7 @@ with tempfile.TemporaryDirectory(prefix='hunta-http-') as tmp:
             anonymous=urllib.request.build_opener()
             assert 'Очень личный черновик' not in request('/',opener=anonymous)[1],'draft hidden'
             assert request('/?p=istoriya-script-x-script',opener=anonymous)[0]==404
-            assert '/assets/js/editor-clipboard.js?v=1' in html and '/assets/js/editor.js?v=17' in html,'clipboard helper loads before editor'
+            assert '/assets/js/editor-clipboard.js?v=1' in html and '/assets/js/editor.js?v=18' in html,'clipboard helper loads before editor'
             assert 'Анонс в ленте' not in html and 'Описание для ссылок' in html,'metadata description is named accurately'
             assert html.index('id="telegram"') < html.index('<summary>Фотографии</summary>'),'publishing actions precede optional media settings'
             assert html.index('/assets/js/video-preview.js') < html.index('/assets/js/editor.js'),'video preparation loads before editor'
@@ -273,6 +273,15 @@ with tempfile.TemporaryDirectory(prefix='hunta-http-') as tmp:
             request('/admin.php',{**manage,'revision':3,'command':'post_delete','list_scope':'local'})
             with sqlite3.connect(storage/'blog.sqlite') as records:assert records.execute('SELECT 1 FROM posts WHERE id=?',[ids[0]]).fetchone() is None,'full deletion removes unposted system record'
             assert list((storage/'private-db-copies').glob('*.sqlite')),'full deletion has verified recovery snapshot'
+            footer_save={'action':'autosave','id':ids[1],'revision':1,'title':'site-hub','body':'Текст','telegram_footer':'off','csrf':csrf}
+            code,result,_=request('/admin.php',footer_save);assert code==200,result
+            saved=json.loads(result)
+            editor=request('/admin.php?view=edit&id='+str(ids[1]))[1]
+            assert '<option value="off" selected>' in editor,'footer choice survives reload'
+            footer_save.pop('telegram_footer');footer_save['revision']=saved['revision']
+            request('/admin.php',footer_save)
+            with sqlite3.connect(storage/'blog.sqlite') as records:assert records.execute('SELECT footer_mode FROM post_telegram_options WHERE post_id=?',[ids[1]]).fetchone()[0]=='off','older clients preserve stored footer choice'
+
             print('OK: HTTP login, CSRF, drafts, upload, private media, publishing, XSS, conflicts, backup')
         finally:
             server.terminate();server.wait(timeout=5)

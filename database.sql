@@ -88,3 +88,9 @@ CREATE TABLE IF NOT EXISTS reader_feedback_attempts (
  PRIMARY KEY(client_key,bucket)
 );
 INSERT OR IGNORE INTO schema_versions VALUES(8,datetime('now'));
+
+CREATE TABLE IF NOT EXISTS post_telegram_options (
+ post_id INTEGER PRIMARY KEY REFERENCES posts(id) ON DELETE CASCADE,
+ footer_mode TEXT NOT NULL DEFAULT 'auto' CHECK(footer_mode IN ('auto','on','off'))
+);
+INSERT OR IGNORE INTO schema_versions VALUES(9,datetime('now'));

@@ -6,7 +6,7 @@
   let dirty = form.dataset.unsaved === '1', busy = false, stopped = false;
   let submitting = false, replay = false, pendingSubmit = null, editor = null;
   const activeUploads = new Set();
-  const fields = ['title', 'body', 'excerpt', 'telegram_text', 'category_id'];
+  const fields = ['title', 'body', 'excerpt', 'telegram_text', 'telegram_footer', 'category_id'];
   const snapshot = () => fields.map(name => form.elements[name].value).join('\u0000');
   function markDirty() {
     dirty = true;
@@ -217,13 +217,14 @@
     }).catch(() => { status.textContent = 'Визуальный редактор не загрузился. Текст доступен в поле ниже; обнови страницу после сохранения.'; });
   }
   form.addEventListener('input', event => {
-    if (event.target.matches('[name=title],[name=body],[name=excerpt],[name=telegram_text],[name=category_id]')) markDirty();
+    if (event.target.matches('[name=title],[name=body],[name=excerpt],[name=telegram_text],[name=telegram_footer],[name=category_id]')) markDirty();
   });
+  form.addEventListener('change', event => { if (event.target.name === 'telegram_footer') markDirty(); });
   async function updateTelegram(button) {
     const before = snapshot(), data = new FormData(form);
     data.delete('photo'); data.set('action', button.value); data.set('telegram_inline', '1');
     const block = document.querySelector('#telegram');
-    const controls = [...block.querySelectorAll('button,input,textarea')];
+    const controls = [...block.querySelectorAll('button,input,textarea,select')];
     const previousDisabled = controls.map(control => control.disabled);
     controls.forEach(control => { control.disabled = true; });
     const feedback = block.querySelector('#telegram-feedback');

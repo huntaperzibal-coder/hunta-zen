@@ -30,6 +30,7 @@ function telegram_editor(array $p,?array $delivery): void {
     $q=$db->prepare("SELECT * FROM telegram_schedule WHERE post_id=? AND state NOT IN ('scheduled','running') ORDER BY id DESC LIMIT 5");$q->execute([$p['id']]);$history=$q->fetchAll();
     $due=date('Y-m-d\TH:i',time()+3600);
     foreach($pending as $job)if($job['channel']===$channel){$due=date('Y-m-d\TH:i',(int)$job['due_at']);break;}
+    $footerOptions='';foreach(['auto'=>'По категории: только Винни и Гена','on'=>'Добавлять','off'=>'Не добавлять'] as $value=>$label)$footerOptions.='<option value="'.$value.'"'.(($p['telegram_footer']??'auto')===$value?' selected':'').'>'.h($label).'</option>';
     $custom=trim((string)$p['telegram_text'])!=='';
     $sent=($delivery['state']??'')==='sent';
     $needsCheck=$delivery && (in_array($delivery['state'],['unknown','sending'],true)||telegram_invalid_message($delivery['error']));
@@ -43,6 +44,7 @@ function telegram_editor(array $p,?array $delivery): void {
         else echo '<p class="hint">Обработчик уже начал отправку. Дождись результата.</p>';
         echo '</div>';
     }
+    echo '<label class="tg-footer-setting">Подпись и ссылка на блог<select class="user-input" name="telegram_footer">'.$footerOptions.'</select></label><p class="hint">В режиме «По категории» у остальных постов нет ни подписи «Гена и Винни», ни ссылки. Ссылка доступна только для опубликованного на сайте поста.</p>';
     if($needsCheck){
         echo '<p class="hint">Проверь этот пост в канале. Если он есть — укажи последнее число из ссылки на сообщение. Если удалён или отсутствует — укажи 0. Это только исправит привязку; публикация начнётся после отдельного нажатия отправки.</p><label><input type="checkbox" name="checked_channel" value="1"> Я проверил канал</label><label>Номер сообщения из ссылки; 0, если его нет<input class="user-input" type="number" name="message_id" min="0" value="0"></label><button class="btn-secondary" name="action" value="resolve">Сохранить результат проверки</button>';
     }else{

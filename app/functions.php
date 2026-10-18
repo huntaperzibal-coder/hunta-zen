@@ -31,7 +31,7 @@ function guard(): void { if (!authenticated()) { header('Location: /admin.php?vi
 function csrf(): string { session_open(); return '<input type="hidden" name="csrf" value="'.h($_SESSION['csrf']).'">'; }
 function verify_csrf(): void { session_open(); if (!hash_equals($_SESSION['csrf'],(string)($_POST['csrf']??''))) { http_response_code(403); exit('Сессия формы устарела. Обнови страницу.'); } }
 function redirect(string $url): never { header('Location: '.$url,true,303); exit; }
-function post(int $id): array { global $db; $q=$db->prepare('SELECT p.*, COALESCE(pc.category_id,0) AS category_id,c.title AS category_title,c.slug AS category_slug FROM posts p LEFT JOIN post_categories pc ON pc.post_id=p.id LEFT JOIN categories c ON c.id=pc.category_id WHERE p.id=?'); $q->execute([$id]); $p=$q->fetch(); if (!$p) throw new RuntimeException('Запись не найдена.'); return $p; }
+function post(int $id): array { global $db; $q=$db->prepare('SELECT p.*, COALESCE(pc.category_id,0) AS category_id,c.title AS category_title,c.slug AS category_slug,COALESCE(pto.footer_mode,\'auto\') AS telegram_footer FROM posts p LEFT JOIN post_categories pc ON pc.post_id=p.id LEFT JOIN categories c ON c.id=pc.category_id LEFT JOIN post_telegram_options pto ON pto.post_id=p.id WHERE p.id=?'); $q->execute([$id]); $p=$q->fetch(); if (!$p) throw new RuntimeException('Запись не найдена.'); return $p; }
 function slugify(string $text): string {
     $from=preg_split('//u','абвгдеёжзийклмнопрстуфхцчшщъыьэюя',-1,PREG_SPLIT_NO_EMPTY);
     $to=['a','b','v','g','d','e','yo','zh','z','i','y','k','l','m','n','o','p','r','s','t','u','f','kh','ts','ch','sh','shch','','y','','e','yu','ya'];
@@ -66,6 +66,8 @@ function save_post(int $id, array $input, bool $autosave=false): array {
         $categoryId=(int)$raw;
         if ($categoryId>0) { $q=$db->prepare('SELECT 1 FROM categories WHERE id=?');$q->execute([$categoryId]);if(!$q->fetchColumn())throw new RuntimeException('Категория не найдена.'); }
     }
+    $footer=(string)($input['telegram_footer']??$old['telegram_footer']);
+    if(!in_array($footer,['auto','on','off'],true))throw new RuntimeException('Неизвестная настройка подписи Telegram.');
     $db->beginTransaction();
     try {
         $q=$db->prepare('UPDATE posts SET title=?,body=?,excerpt=?,telegram_text=?,status=?,slug=?,published_at=?,updated_at=?,revision=revision+1 WHERE id=? AND revision=?');
@@ -75,6 +77,7 @@ function save_post(int $id, array $input, bool $autosave=false): array {
             if ($categoryId===0) $db->prepare('DELETE FROM post_categories WHERE post_id=?')->execute([$id]);
             else $db->prepare('INSERT INTO post_categories(post_id,category_id) VALUES(?,?) ON CONFLICT(post_id) DO UPDATE SET category_id=excluded.category_id')->execute([$id,$categoryId]);
         }
+        $db->prepare('INSERT INTO post_telegram_options(post_id,footer_mode) VALUES(?,?) ON CONFLICT(post_id) DO UPDATE SET footer_mode=excluded.footer_mode')->execute([$id,$footer]);
         if (!$autosave) audit('save:'.$status,$id);
         $db->commit();
     } catch (Throwable $e) { if ($db->inTransaction())$db->rollBack();throw $e; }

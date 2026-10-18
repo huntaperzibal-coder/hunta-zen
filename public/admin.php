@@ -132,7 +132,7 @@ if ($view==='login') {
         if ($p['cover']) echo '<img class="cover" src="'.h(photo_url($p['cover'])).'" alt="">';
         echo '<div class="prose">'.render_body($p['body']).'</div>';
     } else {
-        if ($unsaved) foreach (['title','body','excerpt','telegram_text','revision','category_id'] as $field) if (isset($unsaved[$field])) $p[$field]=$unsaved[$field];
+        if ($unsaved) foreach (['title','body','excerpt','telegram_text','telegram_footer','revision','category_id'] as $field) if (isset($unsaved[$field])) $p[$field]=$unsaved[$field];
         if ($unsaved && ($unsaved['body_format']??'')==='html') $p['body']=DAO_RICH_PREFIX.sanitize_article_html((string)$unsaved['body']);
         $q=$db->prepare('SELECT * FROM telegram_deliveries WHERE post_id=? AND channel=?');$q->execute([$p['id'],$config['telegram_channel']]);$delivery=$q->fetch();
         echo '<div class="toolbar"><a href="/admin.php">← Записи</a><span class="status-chip">'.($p['status']==='published'?'На сайте':'Черновик').'</span><a target="_blank" href="/admin.php?view=preview&id='.$p['id'].'">Предпросмотр ↗</a><a href="#illustrations">Иллюстрации ↓</a></div>';
@@ -144,7 +144,7 @@ if ($view==='login') {
         echo '<details><summary>Описание для ссылок</summary><p class="hint">Не меняет текст рассказа в ленте. Используется в метаданных страницы при открытии отдельного поста.</p><label>Короткое описание<textarea class="user-input" name="excerpt" rows="3" placeholder="Краткое описание поста для метаданных ссылки">'.h($p['excerpt']).'</textarea></label></details>';
         echo '</form>';
         illustration_editor($p);
-        echo '<script src="/assets/tinymce/tinymce.min.js?v=8.5.0" defer></script><script src="/assets/js/editor-clipboard.js?v=1" defer></script><script src="/assets/js/video-preview.js?v=1" defer></script><script src="/assets/js/editor.js?v=17" defer></script>';
+        echo '<script src="/assets/tinymce/tinymce.min.js?v=8.5.0" defer></script><script src="/assets/js/editor-clipboard.js?v=1" defer></script><script src="/assets/js/video-preview.js?v=1" defer></script><script src="/assets/js/editor.js?v=18" defer></script>';
     }
 } elseif ($view==='illustrator') {
     illustration_settings_page();
