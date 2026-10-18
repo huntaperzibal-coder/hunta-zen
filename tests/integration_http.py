@@ -43,8 +43,14 @@ with tempfile.TemporaryDirectory(prefix='hunta-http-') as tmp:
                 code,svg,_=request('/assets/icons/'+icon+'.svg');assert code==200 and '<svg' in svg,'copied theme icon served'
             assert '/assets/js/reader-theme.js?v=2' in public_head and '/assets/css/reader.css?v=9' in public_head,'theme assets cache refreshed'
             assert '/assets/brand/dialogue.svg?v=2' in public_head and '/assets/brand/dao-admin.svg' not in public_head,'separate site identity'
-            for path,heading in [('/admin.php?view=settings','Настройки'),('/admin.php?view=telegram','Telegram'),('/admin.php?view=service','Обслуживание')]:
+            for path,heading in [('/admin.php?view=settings','Настройки'),('/admin.php?view=telegram','Telegram'),('/admin.php?view=service','Обслуживание'),('/admin.php?view=github','GitHub и резервные копии')]:
                 code,panel,_=request(path);assert code==200 and heading in panel,'navigation '+path
+            _,github,_=request('/admin.php?view=github')
+            assert 'data-copy-command=' in github and 'tools/backup_database.php --list' in github,'GitHub has copyable backup commands'
+            assert 'НА КОМПЬЮТЕРЕ' in github and 'НА СЕРВЕРЕ' in github and 'sqlite3.connect' in github,'computer export command verifies SQLite'
+            assert 'GitHub и резервные копии' not in request('/admin.php?view=github',opener=urllib.request.build_opener())[1],'GitHub commands need login'
+            assert request('/assets/js/github-hub.js')[0]==200,'command clipboard script served'
+            assert request('/tools/backup_database.php')[0]==404,'backup CLI not exposed to web'
             _,html,url=request('/admin.php',{'action':'new','csrf':csrf});pid=urllib.parse.parse_qs(urllib.parse.urlparse(url).query)['id'][0]
             revision=re.search(r'name="revision" value="(\d+)"',html)[1]
             data={'action':'save','csrf':csrf,'id':pid,'revision':revision,'title':'История <script>x</script>','body':'Очень личный черновик','excerpt':'','telegram_text':''}

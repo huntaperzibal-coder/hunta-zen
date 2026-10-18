@@ -152,6 +152,8 @@ if ($view==='login') {
     }
 } elseif ($view==='telegram') {
     telegram_page();
+} elseif ($view==='github') {
+    github_page();
 } elseif ($view==='service') {
     echo '<h1>Обслуживание</h1><p>База: SQLite · схема '.h($db->query('SELECT max(version) FROM schema_versions')->fetchColumn()).'</p><p>Telegram: '.(!empty($config['telegram_token']) && !empty($config['telegram_channel'])?'настроен':'ещё не подключён').'</p><p>Резервная копия базы и фотографий через SSH:</p><pre>php tools/backup.php</pre><p>Обновление кода с резервной копией:</p><pre>~/zen-sync.sh</pre><h2>Последние действия</h2><ul class="audit">';
     foreach ($db->query('SELECT * FROM audit ORDER BY id DESC LIMIT 30') as $row) echo '<li>'.h($row['created_at']).' · '.h($row['action']).($row['post_id']?' · запись '.(int)$row['post_id']:'').'</li>';
