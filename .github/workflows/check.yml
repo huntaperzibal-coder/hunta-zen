@@ -12,7 +12,8 @@ jobs:
         with:
           php-version: ${{ matrix.php }}
           extensions: pdo_sqlite, mbstring, curl, fileinfo, dom
-          ini-values: opcache.enable_cli=1
+          coverage: none
+          ini-values: opcache.enable_cli=1, opcache.jit=0
       - run: find app public tools tests -name '*.php' -exec php -l {} \;
       - run: php tests/reader_feedback.php
       - run: php tests/database_backup.php
