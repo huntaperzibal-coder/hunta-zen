@@ -75,12 +75,12 @@
       }, 2000));
       return;
     }
-    const source = event.target.closest('.story img');
+    const source = event.target.closest('.story img') || event.target.closest('[data-lightbox-image], .story-image-link')?.querySelector('img');
     if (!source || !lightbox.showModal || event.ctrlKey || event.metaKey || event.shiftKey || event.altKey) return;
     const link = source.closest('a');
     if (link && !link.classList.contains('story-image-link') && link.href !== source.src) return;
     event.preventDefault();
-    images = [...source.closest('.story').querySelectorAll('img')];
+    images = source.closest('.story') ? [...source.closest('.story').querySelectorAll('img')] : [source];
     position = images.indexOf(source); opener = link || source;
     draw(); lightbox.showModal(); document.body.classList.add('lightbox-open');
     lightbox.querySelector('.lightbox-close').focus();

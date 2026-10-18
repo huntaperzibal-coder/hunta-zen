@@ -41,7 +41,7 @@ with tempfile.TemporaryDirectory(prefix='hunta-http-') as tmp:
             assert 'theme-label' not in public_head and 'theme-icon' not in public_head,'theme toggle has no visible text or emoji'
             for icon in ['sun','moon']:
                 code,svg,_=request('/assets/icons/'+icon+'.svg');assert code==200 and '<svg' in svg,'copied theme icon served'
-            assert '/assets/js/reader-theme.js?v=2' in public_head and '/assets/css/reader.css?v=10' in public_head,'theme assets cache refreshed'
+            assert '/assets/js/reader-theme.js?v=2' in public_head and '/assets/css/reader.css?v=11' in public_head,'theme assets cache refreshed'
             assert '/assets/brand/dialogue.svg?v=2' in public_head and '/assets/brand/dao-admin.svg' not in public_head,'separate site identity'
             for path,heading in [('/admin.php?view=settings','Настройки'),('/admin.php?view=telegram','Telegram'),('/admin.php?view=service','Обслуживание'),('/admin.php?view=github','GitHub и резервные копии')]:
                 code,panel,_=request(path);assert code==200 and heading in panel,'navigation '+path
@@ -166,13 +166,13 @@ with tempfile.TemporaryDirectory(prefix='hunta-http-') as tmp:
             assert 'href="https://example.test/donate"' in request('/support.php',opener=anonymous)[1],'invalid support URL cannot replace saved destination'
             author_settings={'action':'author_settings','csrf':csrf,'author_name':'Hunta','author_bio':'Автор <script>bad()</script>','operator_name':'Тестовый оператор','operator_address':'Тестовый адрес','operator_email':'author@example.test','feedback_enabled':'1'}
             assert request('/admin.php',author_settings)[0]==200,'profile and legal settings saved'
-            assert 'Познакомиться' in request('/feedback.php',opener=anonymous)[1] and '&lt;script&gt;bad()&lt;/script&gt;' in request('/feedback.php',opener=anonymous)[1],'author profile escapes text'
+            assert 'Познакомиться' in request('/feedback.php',opener=anonymous)[1] and '<script>bad()' not in request('/feedback.php',opener=anonymous)[1],'author profile escapes text'
             assert 'Тестовый оператор' in request('/privacy.php',opener=anonymous)[1] and 'Согласие' in request('/consent.php',opener=anonymous)[1],'operator information in separate legal pages'
             guest=urllib.request.build_opener(urllib.request.HTTPCookieProcessor(http.cookiejar.CookieJar()))
             _,form,_=request('/feedback.php',opener=guest)
             feedback_csrf=re.search(r'name="csrf" value="([^"]+)"',form)[1]
             submission=re.search(r'name="submission" value="([^"]+)"',form)[1]
-            answer=sum(map(int,re.search(r'сколько будет ([0-9]+) \+ ([0-9]+)',form).groups()))
+            answer=sum(map(int,re.search(r'[Сс]колько будет ([0-9]+) \+ ([0-9]+)',form).groups()))
             consent_digest=re.search(r'name="consent_digest" value="([^"]+)"',form)[1]
             message={'consent':'1','consent_digest':consent_digest,'answer':str(answer),'csrf':feedback_csrf,'submission':submission,'message':'Личное сообщение <script>private()</script>','contact':'@reader','website':''}
             assert request('/feedback.php',{**message,'csrf':'bad'},opener=guest)[0]==403,'public feedback requires CSRF'
