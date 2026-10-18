@@ -23,7 +23,6 @@ $title=$current?$current['title'].' — '.setting('title'):($category?category_p
 $description=$current?seo_description($current):($category?category_public_title($category['slug'],$category['title']).'. Философские диалоги о жизни.':setting('description')).($page>1?' Страница '.$page.'.':'');
 $seo=$current?seo_post_data($current):['@context'=>'https://schema.org','@type'=>($category||$page>1)?'CollectionPage':'WebSite','name'=>$title,'url'=>seo_canonical(),'inLanguage'=>'ru'];
 page_start($title,false,$description,$current?seo_cover($current):'',$seo);
-if(!$current)echo '<section class="reading-intro"><h1>'.h($category?category_public_title($category['slug'],$category['title']):setting('title')).'</h1><p>'.h($category?category_public_caption($category['slug'],$category['title']):'Философские диалоги о жизни: логика Гены и мистика Винни.').'</p></section>';
 echo '<div class="reading-layout"><aside class="reading-sidebar" aria-label="Навигация по историям">'.category_links('/',['category'=>$categorySlug]);
 if($stories){
     echo '<details class="reading-toc" open><summary>'.($current?'Другие истории':'В этой ленте').'</summary><nav aria-label="Оглавление ленты">';
