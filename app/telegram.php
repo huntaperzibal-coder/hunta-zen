@@ -206,6 +206,12 @@ function telegram_state(int $id,string $channel,string $state,string $error=''):
 function telegram_invalid_message(string $error): bool {
     return preg_match('/MESSAGE_ID_INVALID|message to edit not found/i',$error)===1;
 }
+function telegram_nontext_message(string $error): bool {
+    return str_contains(strtolower($error),'there is no text in the message to edit')||str_starts_with($error,'Привязан медиапост.');
+}
+function telegram_nontext_notice(): string {
+    return 'Привязан медиапост. Telegram сообщил, что у этого сообщения нет текстового тела (например, это фото с подписью). Привязка сохранена. Такой пост нельзя обновить текущей кнопкой: правь его вручную в Telegram. Новый пост автоматически не создаётся.';
+}
 function telegram_send(int $id,?callable $transport=null,?array $snapshot=null): void {
     global $config,$db,$storage;
     if(empty($config['telegram_token'])||empty($config['telegram_channel']))throw new RuntimeException('Подключи бота и канал в разделе Telegram.');
@@ -216,6 +222,7 @@ function telegram_send(int $id,?callable $transport=null,?array $snapshot=null):
         if(trim($current['title'])===''||trim(body_plain($current['body']))==='')throw new RuntimeException('Для отправки нужны заголовок и текст.');
         $p=$snapshot??$current;$p['status']=$current['status'];$p['slug']=$current['slug'];$plan=telegram_plan($p);$channel=$config['telegram_channel'];
         $q=$db->prepare('SELECT * FROM telegram_deliveries WHERE post_id=? AND channel=?');$q->execute([$id,$channel]);$delivery=$q->fetch();
+        if($delivery&&telegram_nontext_message((string)$delivery['error']))throw new RuntimeException(telegram_nontext_notice());
         if($delivery && (in_array($delivery['state'],['sending','unknown'],true)||telegram_invalid_message($delivery['error'])))throw new RuntimeException('Результат прошлой отправки неизвестен. Проверь канал и укажи результат ниже.');
         // Adopt the original single text delivery without duplicating it after an upgrade.
         if(!empty($delivery['message_id']))$db->prepare("INSERT OR IGNORE INTO telegram_parts(post_id,channel,kind,ordinal,message_id,state) VALUES(?,?,'text',0,?,'sent')")->execute([$id,$channel,$delivery['message_id']]);
@@ -250,6 +257,12 @@ function telegram_send(int $id,?callable $transport=null,?array $snapshot=null):
             }
             if(!$response['ok']){
                 $description=(string)($response['description']??'');
+                if(!$delete&&$message&&telegram_nontext_message($description)){
+                    // The rejected edit did not remove the author's existing media message.
+                    $db->prepare("UPDATE telegram_parts SET state='sent' WHERE post_id=? AND channel=? AND kind=? AND ordinal=?")->execute([$id,$channel,$part['kind'],$part['ordinal']]);
+                    telegram_state($id,$channel,'sent',telegram_nontext_notice());
+                    throw new RuntimeException(telegram_nontext_notice());
+                }
                 $safeRepeat=($message && str_contains($description,'message is not modified'))||($delete && str_contains($description,'message to delete not found'));
                 if(!$safeRepeat){
                     $db->prepare("UPDATE telegram_parts SET state='failed' WHERE post_id=? AND channel=? AND kind=? AND ordinal=?")->execute([$id,$channel,$part['kind'],$part['ordinal']]);
@@ -295,8 +308,9 @@ function telegram_resolve(int $id,int $message): void {
 }
 
 /** Manual adoption only: records an author's checked message, never calls Telegram. */
-function telegram_bind_existing(int $id,string $number,bool $checked): void {
+function telegram_bind_existing(int $id,string $number,bool $checked,string $kind='text'): void {
     global $db,$config,$storage;
+    if(!in_array($kind,['text','media'],true))throw new RuntimeException('Выбери тип существующего сообщения.');
     if(!$checked)throw new RuntimeException('Сначала проверь сообщение в выбранном канале и отметь подтверждение.');
     if(!preg_match('/^[1-9][0-9]{0,9}$/D',$number)||(int)$number>2147483647)throw new RuntimeException('Укажи номер сообщения — последнее число из ссылки на пост.');
     $channel=(string)($config['telegram_channel']??'');
@@ -310,7 +324,7 @@ function telegram_bind_existing(int $id,string $number,bool $checked): void {
         if($q->fetchColumn())throw new RuntimeException('У этого поста уже есть история отправки в канал. Используй обновление или проверку результата.');
         $q=$db->prepare('SELECT 1 FROM telegram_deliveries WHERE channel=? AND message_id=? UNION SELECT 1 FROM telegram_parts WHERE channel=? AND message_id=?');$q->execute([$channel,(int)$number,$channel,(int)$number]);
         if($q->fetchColumn())throw new RuntimeException('Это сообщение уже привязано к другому посту.');
-        $db->prepare("INSERT INTO telegram_deliveries(post_id,channel,message_id,state,updated_at) VALUES(?,?,?,'sent',?)")->execute([$id,$channel,(int)$number,now()]);
+        $db->prepare("INSERT INTO telegram_deliveries(post_id,channel,message_id,state,error,updated_at) VALUES(?,?,?,'sent',?,?)")->execute([$id,$channel,(int)$number,$kind==='media'?telegram_nontext_notice():'',now()]);
         $db->prepare("INSERT INTO telegram_parts(post_id,channel,kind,ordinal,message_id,state) VALUES(?,?,'text',0,?,'sent')")->execute([$id,$channel,(int)$number]);
         $db->commit();audit('telegram:existing-bound',$id);
     }catch(Throwable $e){if($db->inTransaction())$db->rollBack();throw $e;}

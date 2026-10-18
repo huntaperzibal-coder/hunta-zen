@@ -26,6 +26,8 @@ function telegram_save_connection(array $input,?callable $transport=null): void 
 function telegram_schedule_post(int $id,string $value): void {
     global $db,$config;
     if(empty($config['telegram_token'])||empty($config['telegram_channel']))throw new RuntimeException('Сначала подключи Telegram.');
+    $known=$db->prepare('SELECT error FROM telegram_deliveries WHERE post_id=? AND channel=?');$known->execute([$id,$config['telegram_channel']]);
+    if(telegram_nontext_message((string)($known->fetchColumn()?:'')))throw new RuntimeException(telegram_nontext_notice());
     $date=DateTimeImmutable::createFromFormat('!Y-m-d\TH:i',$value,new DateTimeZone('Asia/Novosibirsk'));
     if(!$date || $date->format('Y-m-d\TH:i')!==$value || $date->getTimestamp()<=time()+30)throw new RuntimeException('Выбери будущее время, минимум через минуту. Часовой пояс — Новосибирск (UTC+7).');
     $p=post($id);if(trim($p['title'])===''||trim(body_plain($p['body']))==='')throw new RuntimeException('Для отправки нужны заголовок и текст.');telegram_plan($p);

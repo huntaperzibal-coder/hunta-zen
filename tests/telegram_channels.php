@@ -35,6 +35,15 @@ try{
     try{telegram_bind_existing($other,'35',true);throw new LogicException('duplicate binding accepted');}catch(RuntimeException $e){channels_check(true,'one Telegram message cannot bind to two posts');}
     telegram_schedule_post($other,date('Y-m-d\TH:i',time()+3600));
     try{telegram_bind_existing($other,'36',true);throw new LogicException('pending adoption accepted');}catch(RuntimeException $e){channels_check(true,'scheduled destination must be cancelled before adoption');}
+    telegram_cancel_schedule($other,'-100111');telegram_bind_existing($other,'36',true);
+    $mediaCalls=[];
+    try{telegram_send($other,function($method,$payload)use(&$mediaCalls){$mediaCalls[]=[$method,$payload];return ['ok'=>false,'error_code'=>400,'description'=>'Bad Request: there is no text in the message to edit'];});throw new LogicException('media edit accepted');}catch(RuntimeException $e){channels_check(str_contains($e->getMessage(),'Привязка сохранена'),'media edit refusal explains preserved binding');}
+    $mediaRecord=$db->query('SELECT * FROM telegram_deliveries WHERE post_id='.$other)->fetch();channels_check($mediaRecord['state']==='sent'&&(int)$mediaRecord['message_id']===36&&count($mediaCalls)===1,'media refusal keeps message id and never creates replacement');
+    try{telegram_send($other,function()use(&$mediaCalls){$mediaCalls[]='unexpected';return ['ok'=>true];});throw new LogicException('known media retry accepted');}catch(RuntimeException $e){channels_check(count($mediaCalls)===1,'known non-text post does not repeat unsupported edit');}
+    try{telegram_schedule_post($other,date('Y-m-d\TH:i',time()+3600));throw new LogicException('known media scheduled');}catch(RuntimeException $e){channels_check(true,'unsupported media update cannot be scheduled');}
+    ob_start();telegram_editor(post($other),$mediaRecord);$mediaHtml=ob_get_clean();channels_check(str_contains($mediaHtml,'✓ Пост размещён в канале')&&!str_contains($mediaHtml,'value="telegram"'),'media binding stays published and hides unsupported send action');
+    $db->prepare("INSERT INTO posts(slug,title,body,created_at,updated_at) VALUES('photo-bound','Фото','Текст',?,?)")->execute([now(),now()]);$photoPost=(int)$db->lastInsertId();telegram_bind_existing($photoPost,'37',true,'media');
+    channels_check(telegram_nontext_message((string)$db->query('SELECT error FROM telegram_deliveries WHERE post_id='.$photoPost)->fetchColumn()),'media can be adopted directly without an API edit');
     telegram_select_channel('-100222');
     try{telegram_select_channel('-100999');throw new LogicException('unknown channel accepted');}catch(RuntimeException $e){channels_check($config['telegram_channel']==='-100222','unknown destination rejected without changing context');}
 }finally{$db=null;$walk=function($path)use(&$walk){foreach(glob($path.'/*') as $f){if(is_dir($f))$walk($f);else unlink($f);}rmdir($path);};$walk($dir);}

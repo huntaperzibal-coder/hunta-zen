@@ -90,7 +90,7 @@ if ($_SERVER['REQUEST_METHOD']==='POST') {
                     } else $db->prepare('UPDATE posts SET cover=?,revision=revision+1 WHERE id=?')->execute([$name,$id]);
                 }
                 if($action==='telegram_select'){telegram_select_channel((string)($_POST['telegram_next_channel']??''));redirect('/admin.php?view=edit&id='.$id.telegram_channel_query().'#telegram');}
-                if($action==='telegram_bind')telegram_bind_existing($id,trim((string)($_POST['existing_message_id']??'')),!empty($_POST['existing_checked']));
+                if($action==='telegram_bind')telegram_bind_existing($id,trim((string)($_POST['existing_message_id']??'')),!empty($_POST['existing_checked']),(string)($_POST['existing_message_kind']??'text'));
                 if ($action==='telegram') { telegram_cancel_schedule($id,(string)$config['telegram_channel']);telegram_send($id); }
                 if ($action==='telegram_schedule') telegram_schedule_post($id,(string)($_POST['telegram_due']??''));
                 if ($action==='telegram_cancel') $cancelledCount=telegram_cancel_schedule($id,(string)$config['telegram_channel']);
@@ -211,19 +211,20 @@ if ($view==='login') {
     echo '</nav>';
     $categorySlug=(string)($_GET['category']??'');$category=$categorySlug!==''?category_by_slug($categorySlug):null;
     echo category_links('/admin.php',array_filter(['status'=>$filter,'scope'=>$scope,'category'=>$categorySlug,'channel'=>(string)($config['telegram_channel']??'')],fn($v)=>$v!==''));
+    $tgSent="(d.state='sent' OR (d.message_id IS NOT NULL AND (d.error LIKE '%there is no text in the message to edit%' OR d.error LIKE 'Привязан медиапост.%')))";
     $where=[];$params=[];
     if($filter){$where[]='p.status=?';$params[]=$filter;}
     if($scope==='site')$where[]="p.status='published'";
-    if($scope==='telegram')$where[]="d.state='sent'";
-    if($scope==='both')$where[]="p.status='published' AND d.state='sent'";
+    if($scope==='telegram')$where[]=$tgSent;
+    if($scope==='both')$where[]="p.status='published' AND ".$tgSent;
     if($scope==='local')$where[]="p.status='draft' AND d.state IS NULL";
     if($category){$where[]='pc.category_id=?';$params[]=$category['id'];}
     elseif($categorySlug!=='')$where[]='0=1';
     $channel=(string)($config['telegram_channel']??'');
-    $q=$db->prepare('SELECT p.*,c.title AS category_title,d.state AS telegram_state,s.state AS telegram_schedule_state,s.due_at AS telegram_due_at FROM posts p LEFT JOIN post_categories pc ON pc.post_id=p.id LEFT JOIN categories c ON c.id=pc.category_id LEFT JOIN telegram_deliveries d ON d.post_id=p.id AND d.channel=? LEFT JOIN telegram_schedule s ON s.id=(SELECT max(ts.id) FROM telegram_schedule ts WHERE ts.post_id=p.id AND ts.channel=?)'.($where?' WHERE '.implode(' AND ',$where):'').' ORDER BY p.updated_at DESC LIMIT 100');$q->execute(array_merge([$channel,$channel],$params));$posts=$q->fetchAll();
+    $q=$db->prepare('SELECT p.*,c.title AS category_title,d.state AS telegram_state,d.message_id AS telegram_message_id,d.error AS telegram_error,s.state AS telegram_schedule_state,s.due_at AS telegram_due_at FROM posts p LEFT JOIN post_categories pc ON pc.post_id=p.id LEFT JOIN categories c ON c.id=pc.category_id LEFT JOIN telegram_deliveries d ON d.post_id=p.id AND d.channel=? LEFT JOIN telegram_schedule s ON s.id=(SELECT max(ts.id) FROM telegram_schedule ts WHERE ts.post_id=p.id AND ts.channel=?)'.($where?' WHERE '.implode(' AND ',$where):'').' ORDER BY p.updated_at DESC LIMIT 100');$q->execute(array_merge([$channel,$channel],$params));$posts=$q->fetchAll();
     if (!$posts) echo '<div class="empty"><h2>Здесь начинается история</h2><p>Сохрани мысль в черновик. Возвращайся к ней, когда захочется.</p></div>';
     $counts=$db->query("SELECT COUNT(*) AS total,SUM(status='draft') AS drafts,SUM(status='published') AS published FROM posts")->fetch();
-    $tgCount=$db->prepare("SELECT COUNT(*) FROM telegram_deliveries WHERE channel=? AND state='sent'");$tgCount->execute([$channel]);$telegramCount=(int)$tgCount->fetchColumn();
+    $tgCount=$db->prepare("SELECT COUNT(*) FROM telegram_deliveries d WHERE channel=? AND ".$tgSent);$tgCount->execute([$channel]);$telegramCount=(int)$tgCount->fetchColumn();
     echo '<div class="index-stats"><div class="index-stat"><div class="index-stat-value">'.(int)$counts['total'].'</div><div class="index-stat-label">В системе</div></div><div class="index-stat"><div class="index-stat-value">'.(int)$counts['drafts'].'</div><div class="index-stat-label">Не на сайте</div></div><div class="index-stat"><div class="index-stat-value">'.(int)$counts['published'].'</div><div class="index-stat-label">На сайте</div></div><div class="index-stat"><div class="index-stat-value">'.$telegramCount.'</div><div class="index-stat-label">В Telegram</div></div></div>';
     if ($posts) {
         echo '<div class="table-scroll"><table class="index-table"><thead><tr><th>Название</th><th>Сайт</th><th>Telegram</th><th>Изменено</th><th></th></tr></thead><tbody>';

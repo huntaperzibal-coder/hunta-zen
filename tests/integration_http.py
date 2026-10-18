@@ -350,6 +350,11 @@ with tempfile.TemporaryDirectory(prefix='hunta-http-') as tmp:
             assert code==200 and bound_url.endswith('#telegram') and 'channel=-100200' in bound_url and 'Обновить в Telegram' in bound,'adoption returns to same channel and offers update'
             with sqlite3.connect(storage/'blog.sqlite') as records:
                 assert records.execute("SELECT message_id FROM telegram_deliveries WHERE post_id=? AND channel='-100200'",[ids[1]]).fetchone()[0]==35,'manual message id stored without external request'
+            with sqlite3.connect(storage/'blog.sqlite') as records:
+                records.execute("UPDATE telegram_deliveries SET state='failed',error='Telegram отклонил запрос (400): Bad Request: there is no text in the message to edit' WHERE post_id=? AND channel='-100200'",[ids[1]])
+            old_media=request('/admin.php?view=edit&id='+str(ids[1])+'&channel=-100200')[1]
+            assert '✓ Пост размещён в канале' in old_media and 'Привязка сохранена' in old_media and 'value="telegram"' not in old_media,'old media failure renders preserved publication without resending'
+            assert 'Общий пост' in request('/admin.php?scope=telegram&channel=-100200')[1],'old media remains in published Telegram filter'
             print('OK: HTTP login, CSRF, drafts, upload, private media, publishing, XSS, conflicts, backup')
         finally:
             server.terminate();server.wait(timeout=5)
