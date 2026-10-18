@@ -40,6 +40,7 @@ require_once __DIR__ . '/author_pages.php';
 require_once __DIR__ . '/orda_layout.php';
 require_once __DIR__ . '/telegram.php';
 require_once __DIR__ . '/telegram_channels.php';
+require_once __DIR__ . '/telegram_media.php';
 require_once __DIR__ . '/telegram_schedule.php';
 require_once __DIR__ . '/telegram_ui.php';
 require_once __DIR__ . '/post_management.php';

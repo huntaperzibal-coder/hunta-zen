@@ -60,7 +60,7 @@ with tempfile.TemporaryDirectory(prefix='hunta-http-') as tmp:
             anonymous=urllib.request.build_opener()
             assert 'Очень личный черновик' not in request('/',opener=anonymous)[1],'draft hidden'
             assert request('/?p=istoriya-script-x-script',opener=anonymous)[0]==404
-            assert '/assets/js/editor-clipboard.js?v=1' in html and '/assets/js/editor.js?v=18' in html,'clipboard helper loads before editor'
+            assert '/assets/js/editor-clipboard.js?v=1' in html and '/assets/js/editor.js?v=19' in html,'clipboard helper loads before editor'
             assert 'Анонс в ленте' not in html and 'Описание для ссылок' in html,'metadata description is named accurately'
             assert html.index('id="telegram"') < html.index('<summary>Фотографии</summary>'),'publishing actions precede optional media settings'
             assert html.index('/assets/js/video-preview.js') < html.index('/assets/js/editor.js'),'video preparation loads before editor'
@@ -353,7 +353,7 @@ with tempfile.TemporaryDirectory(prefix='hunta-http-') as tmp:
             with sqlite3.connect(storage/'blog.sqlite') as records:
                 records.execute("UPDATE telegram_deliveries SET state='failed',error='Telegram отклонил запрос (400): Bad Request: there is no text in the message to edit' WHERE post_id=? AND channel='-100200'",[ids[1]])
             old_media=request('/admin.php?view=edit&id='+str(ids[1])+'&channel=-100200')[1]
-            assert '✓ Пост размещён в канале' in old_media and 'Привязка сохранена' in old_media and 'value="telegram"' not in old_media,'old media failure renders preserved publication without resending'
+            assert '✓ Пост размещён в канале' in old_media and 'ещё не обновлялся' in old_media and 'value="telegram"' in old_media and 'telegram_media_update' in old_media,'old media failure preserves publication and restores update controls'
             assert 'Общий пост' in request('/admin.php?scope=telegram&channel=-100200')[1],'old media remains in published Telegram filter'
             print('OK: HTTP login, CSRF, drafts, upload, private media, publishing, XSS, conflicts, backup')
         finally:

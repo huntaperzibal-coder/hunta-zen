@@ -210,9 +210,9 @@ function telegram_nontext_message(string $error): bool {
     return str_contains(strtolower($error),'there is no text in the message to edit')||str_starts_with($error,'Привязан медиапост.');
 }
 function telegram_nontext_notice(): string {
-    return 'Привязан медиапост. Telegram сообщил, что у этого сообщения нет текстового тела (например, это фото с подписью). Привязка сохранена. Такой пост нельзя обновить текущей кнопкой: правь его вручную в Telegram. Новый пост автоматически не создаётся.';
+    return 'Привязан медиапост. Привязка сохранена. Обновление выполняется в том же сообщении: подпись и одно фото или видео. Лимит подписи — 1024 символа. Выбери, что обновить, и нажми «Обновить в Telegram».';
 }
-function telegram_send(int $id,?callable $transport=null,?array $snapshot=null): void {
+function telegram_send(int $id,?callable $transport=null,?array $snapshot=null,string $mediaMode='auto'): void {
     global $config,$db,$storage;
     if(empty($config['telegram_token'])||empty($config['telegram_channel']))throw new RuntimeException('Подключи бота и канал в разделе Telegram.');
     $lock=fopen($storage.'/telegram.lock','c');
@@ -220,10 +220,14 @@ function telegram_send(int $id,?callable $transport=null,?array $snapshot=null):
     try{
         $current=post($id);
         if(trim($current['title'])===''||trim(body_plain($current['body']))==='')throw new RuntimeException('Для отправки нужны заголовок и текст.');
-        $p=$snapshot??$current;$p['status']=$current['status'];$p['slug']=$current['slug'];$plan=telegram_plan($p);$channel=$config['telegram_channel'];
+        $p=$snapshot??$current;$p['status']=$current['status'];$p['slug']=$current['slug'];$channel=$config['telegram_channel'];
         $q=$db->prepare('SELECT * FROM telegram_deliveries WHERE post_id=? AND channel=?');$q->execute([$id,$channel]);$delivery=$q->fetch();
-        if($delivery&&telegram_nontext_message((string)$delivery['error']))throw new RuntimeException(telegram_nontext_notice());
         if($delivery && (in_array($delivery['state'],['sending','unknown'],true)||telegram_invalid_message($delivery['error'])))throw new RuntimeException('Результат прошлой отправки неизвестен. Проверь канал и укажи результат ниже.');
+        $meta=telegram_message_meta($id,$channel,$delivery?:null);
+        if($delivery&&$meta['format']==='media'){
+            telegram_update_media($p,$delivery,$transport,(string)($snapshot['_telegram_media_mode']??$mediaMode));return;
+        }
+        $plan=telegram_plan($p);
         // Adopt the original single text delivery without duplicating it after an upgrade.
         if(!empty($delivery['message_id']))$db->prepare("INSERT OR IGNORE INTO telegram_parts(post_id,channel,kind,ordinal,message_id,state) VALUES(?,?,'text',0,?,'sent')")->execute([$id,$channel,$delivery['message_id']]);
         $q=$db->prepare('SELECT * FROM telegram_parts WHERE post_id=? AND channel=?');$q->execute([$id,$channel]);$old=[];
@@ -260,6 +264,7 @@ function telegram_send(int $id,?callable $transport=null,?array $snapshot=null):
                 if(!$delete&&$message&&telegram_nontext_message($description)){
                     // The rejected edit did not remove the author's existing media message.
                     $db->prepare("UPDATE telegram_parts SET state='sent' WHERE post_id=? AND channel=? AND kind=? AND ordinal=?")->execute([$id,$channel,$part['kind'],$part['ordinal']]);
+                    $db->prepare("INSERT INTO telegram_message_meta(post_id,channel,format,linked_at) VALUES(?,?,'media',?) ON CONFLICT(post_id,channel) DO UPDATE SET format='media',synced_hash='',synced_at=NULL")->execute([$id,$channel,now()]);
                     telegram_state($id,$channel,'sent',telegram_nontext_notice());
                     throw new RuntimeException(telegram_nontext_notice());
                 }
@@ -283,6 +288,7 @@ function telegram_send(int $id,?callable $transport=null,?array $snapshot=null):
         // One rich message uses the text slot; legacy photo slots are removed after confirmation.
         $q=$db->prepare("SELECT message_id FROM telegram_parts WHERE post_id=? AND channel=? AND kind='text' AND ordinal=0");$q->execute([$id,$channel]);
         $db->prepare("UPDATE telegram_deliveries SET state='sent',message_id=?,error='',updated_at=? WHERE post_id=? AND channel=?")->execute([$q->fetchColumn()?:null,now(),$id,$channel]);
+        telegram_record_sync($id,$channel,'rich',hash('sha256',json_encode($plan[0],JSON_UNESCAPED_UNICODE|JSON_THROW_ON_ERROR)));
         audit($delivery?'telegram:update':'telegram:send',$id);
     }finally{flock($lock,LOCK_UN);fclose($lock);}
 }
@@ -303,6 +309,9 @@ function telegram_resolve(int $id,int $message): void {
             if($q->fetchColumn())telegram_state($id,$channel,'failed','Проверено. Нажми отправку, чтобы завершить публикацию.');
             else $db->prepare("UPDATE telegram_deliveries SET state=?,message_id=?,updated_at=? WHERE post_id=? AND channel=? AND state IN ('sending','unknown')")->execute([$message?'sent':'failed',$message?:null,now(),$id,$channel]);
         }
+        $q=$db->prepare('SELECT message_id FROM telegram_deliveries WHERE post_id=? AND channel=?');$q->execute([$id,$channel]);
+        if(!$q->fetchColumn())$db->prepare('DELETE FROM telegram_message_meta WHERE post_id=? AND channel=?')->execute([$id,$channel]);
+        else $db->prepare("UPDATE telegram_message_meta SET synced_hash='',synced_at=NULL WHERE post_id=? AND channel=?")->execute([$id,$channel]);
         audit('telegram:manual-check',$id);
     }finally{flock($lock,LOCK_UN);fclose($lock);}
 }
@@ -326,6 +335,7 @@ function telegram_bind_existing(int $id,string $number,bool $checked,string $kin
         if($q->fetchColumn())throw new RuntimeException('Это сообщение уже привязано к другому посту.');
         $db->prepare("INSERT INTO telegram_deliveries(post_id,channel,message_id,state,error,updated_at) VALUES(?,?,?,'sent',?,?)")->execute([$id,$channel,(int)$number,$kind==='media'?telegram_nontext_notice():'',now()]);
         $db->prepare("INSERT INTO telegram_parts(post_id,channel,kind,ordinal,message_id,state) VALUES(?,?,'text',0,?,'sent')")->execute([$id,$channel,(int)$number]);
+        $db->prepare('INSERT INTO telegram_message_meta(post_id,channel,format,linked_at) VALUES(?,?,?,?)')->execute([$id,$channel,$kind==='media'?'media':'rich',now()]);
         $db->commit();audit('telegram:existing-bound',$id);
     }catch(Throwable $e){if($db->inTransaction())$db->rollBack();throw $e;}
     finally{flock($lock,LOCK_UN);fclose($lock);}

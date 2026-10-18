@@ -247,7 +247,7 @@
       const scroller = document.querySelector('.orda-shell .main');
       if (scroller) scroller.scrollTop += delta; else window.scrollBy(0, delta);
       dirty = before !== snapshot();
-      status.textContent = dirty ? 'Есть новые изменения' : 'Текст сохранён';
+      status.textContent = dirty ? 'Есть новые изменения' : 'Сохранено в базе сайта';
     } catch (error) {
       const message = String(error.message || error);
       feedback.textContent = message; feedback.setAttribute('role', 'alert');
@@ -280,7 +280,7 @@
       const result = await response.json();
       if (!response.ok) { stopped = true; throw Error(result.error || 'Не удалось сохранить'); }
       form.elements.revision.value = result.revision; syncBody(); dirty = before !== snapshot();
-      status.textContent = dirty ? 'Есть новые изменения' : 'Сохранено в ' + result.saved;
+      status.textContent = dirty ? 'Есть новые изменения' : 'Сохранено в базе сайта · ' + result.saved;
     } catch (error) { status.textContent = String(error.message || error); }
     finally { busy = false; if (pendingSubmit && !stopped) submitPending(); }
   }

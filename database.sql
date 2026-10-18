@@ -98,3 +98,17 @@ INSERT OR IGNORE INTO schema_versions VALUES(9,datetime('now'));
 -- One-time launch, explicitly authorized by the author. Later manual opt-out persists.
 UPDATE settings SET value='1' WHERE key='indexed' AND NOT EXISTS (SELECT 1 FROM schema_versions WHERE version=10);
 INSERT OR IGNORE INTO schema_versions VALUES(10,datetime('now'));
+
+-- Channel-specific format and confirmed synchronization, separate from mere presence.
+CREATE TABLE IF NOT EXISTS telegram_message_meta (
+ post_id INTEGER NOT NULL, channel TEXT NOT NULL,
+ format TEXT NOT NULL CHECK(format IN ('rich','media')),
+ linked_at TEXT, synced_at TEXT, synced_hash TEXT NOT NULL DEFAULT '',
+ update_mode TEXT NOT NULL DEFAULT 'auto' CHECK(update_mode IN ('auto','caption','photo','video')),
+ PRIMARY KEY(post_id,channel),
+ FOREIGN KEY(post_id,channel) REFERENCES telegram_deliveries(post_id,channel) ON DELETE CASCADE
+);
+INSERT OR IGNORE INTO telegram_message_meta(post_id,channel,format,linked_at)
+ SELECT post_id,channel,'media',updated_at FROM telegram_deliveries
+ WHERE message_id IS NOT NULL AND (error LIKE '%there is no text in the message to edit%' OR error LIKE 'Привязан медиапост.%');
+INSERT OR IGNORE INTO schema_versions VALUES(11,datetime('now'));

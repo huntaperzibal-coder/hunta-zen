@@ -23,14 +23,14 @@ function telegram_save_connection(array $input,?callable $transport=null): void 
         $config=$old;telegram_store_channel($connection,!empty($input['make_default']));telegram_select_channel($connection['telegram_channel']);audit('telegram:connection-checked');
     }catch(Throwable $e){$config=$old;throw new RuntimeException($e instanceof RuntimeException?$e->getMessage():'Не удалось проверить Telegram. Подключение не изменено.');}
 }
-function telegram_schedule_post(int $id,string $value): void {
+function telegram_schedule_post(int $id,string $value,string $mediaMode='auto'): void {
     global $db,$config;
     if(empty($config['telegram_token'])||empty($config['telegram_channel']))throw new RuntimeException('Сначала подключи Telegram.');
-    $known=$db->prepare('SELECT error FROM telegram_deliveries WHERE post_id=? AND channel=?');$known->execute([$id,$config['telegram_channel']]);
-    if(telegram_nontext_message((string)($known->fetchColumn()?:'')))throw new RuntimeException(telegram_nontext_notice());
+    $known=$db->prepare('SELECT * FROM telegram_deliveries WHERE post_id=? AND channel=?');$known->execute([$id,$config['telegram_channel']]);$delivery=$known->fetch();
+    $meta=telegram_message_meta($id,$config['telegram_channel'],$delivery?:null);
     $date=DateTimeImmutable::createFromFormat('!Y-m-d\TH:i',$value,new DateTimeZone('Asia/Novosibirsk'));
     if(!$date || $date->format('Y-m-d\TH:i')!==$value || $date->getTimestamp()<=time()+30)throw new RuntimeException('Выбери будущее время, минимум через минуту. Часовой пояс — Новосибирск (UTC+7).');
-    $p=post($id);if(trim($p['title'])===''||trim(body_plain($p['body']))==='')throw new RuntimeException('Для отправки нужны заголовок и текст.');telegram_plan($p);
+    $p=post($id);if(trim($p['title'])===''||trim(body_plain($p['body']))==='')throw new RuntimeException('Для отправки нужны заголовок и текст.');if($meta['format']==='media'){telegram_media_plan($p,$mediaMode);$p['_telegram_media_mode']=$mediaMode;}else telegram_plan($p);
     $q=$db->prepare("SELECT 1 FROM telegram_deliveries WHERE post_id=? AND channel=? AND state IN ('sending','unknown')");$q->execute([$id,$config['telegram_channel']]);
     if($q->fetchColumn())throw new RuntimeException('Сначала проверь результат предыдущей отправки.');
     $db->beginTransaction();

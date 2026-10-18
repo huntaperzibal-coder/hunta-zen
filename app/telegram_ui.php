@@ -9,8 +9,9 @@ function telegram_list_indicator(array $row): string {
     $schedule=(string)($row['telegram_schedule_state']??'');
     $kind='none';$label='Не размещено';$note='';
     $hint='Нет подтверждённой отправки из админки в выбранный канал.';
-    if($delivery==='sent'||(!empty($row['telegram_message_id'])&&telegram_nontext_message((string)($row['telegram_error']??'')))){
+    if($delivery==='sent'||(!empty($row['telegram_message_id'])&&(($row['telegram_format']??'')==='media'||telegram_nontext_message((string)($row['telegram_error']??''))))){
         $kind='sent';$label='✓ Размещено';$hint='Последняя отправка в выбранный канал подтверждена Telegram. Правки на сайте не отправляются автоматически.';
+        if(!empty($row['telegram_linked_at'])&&empty($row['telegram_synced_at']))$note='Привязан; ещё не обновлялся';
         if(in_array($schedule,['scheduled','running'],true))$note=$schedule==='running'?'Обновление отправляется':'Обновление запланировано';
     }elseif(in_array($delivery,['unknown','sending'],true)){
         $kind='check';$label='Проверь канал';$hint='Результат отправки не подтверждён. Сообщение могло попасть в канал; сначала проверь его.';
@@ -32,7 +33,8 @@ function telegram_editor(array $p,?array $delivery): void {
     foreach($pending as $job)if($job['channel']===$channel){$due=date('Y-m-d\TH:i',(int)$job['due_at']);break;}
     $footerOptions='';foreach(['auto'=>'По категории: только Винни и Гена','on'=>'Добавлять','off'=>'Не добавлять'] as $value=>$label)$footerOptions.='<option value="'.$value.'"'.(($p['telegram_footer']??'auto')===$value?' selected':'').'>'.h($label).'</option>';
     $custom=trim((string)$p['telegram_text'])!=='';
-    $nontext=$delivery&&!empty($delivery['message_id'])&&telegram_nontext_message((string)$delivery['error']);
+    $meta=telegram_message_meta((int)$p['id'],$channel,$delivery);
+    $nontext=$delivery&&!empty($delivery['message_id'])&&$meta['format']==='media';
     $sent=($delivery['state']??'')==='sent'||$nontext;
     $needsCheck=$delivery && (in_array($delivery['state'],['unknown','sending'],true)||telegram_invalid_message($delivery['error']));
     $connected=$channel!==''&&!empty($config['telegram_token']);
@@ -50,8 +52,16 @@ function telegram_editor(array $p,?array $delivery): void {
         }
         echo '</ul>';
     }
-    if($nontext)echo '<p class="hint">'.h(telegram_nontext_notice()).'</p>';
-    elseif(!empty($delivery['error']))echo '<p class="auth-error tg-delivery-error">'.h($delivery['error']).'</p>';
+    if($sent){
+        $syncLabel='Размещение учтено; соответствие текущему тексту ещё не подтверждено.';
+        if($meta['linked_at']&&!$meta['synced_at'])$syncLabel='Привязан существующий пост. Из админки ещё не обновлялся.';
+        if($meta['synced_at']){
+            try{$hash=$nontext?telegram_media_plan($p,$meta['update_mode'])['hash']:hash('sha256',json_encode(telegram_plan($p)[0],JSON_UNESCAPED_UNICODE|JSON_THROW_ON_ERROR));$same=hash_equals($meta['synced_hash'],$hash);}catch(RuntimeException $e){$same=false;}
+            $syncLabel=$same?($nontext&&$meta['update_mode']==='caption'?'Подпись соответствует текущему тексту; прежнее вложение сохранено.':'Текущая версия подтверждена Telegram.').' Последнее подтверждение: '.date('d.m.Y H:i',strtotime($meta['synced_at'])):'Есть изменения для Telegram. Последнее подтверждённое обновление: '.date('d.m.Y H:i',strtotime($meta['synced_at']));
+        }
+        echo '<p class="tg-sync-status hint">'.h($syncLabel).'</p>';
+    }
+    if(!empty($delivery['error'])&&!telegram_nontext_message((string)$delivery['error']))echo '<p class="auth-error tg-delivery-error">'.h($delivery['error']).'</p>';
     if($pending){
         echo '<div class="tg-schedule-current"><strong>Отправка назначена</strong>';
         foreach($pending as $job)echo '<p>'.($job['state']==='running'?'Отправляется':'Ожидает отправки').' · <strong>'.h(date('d.m.Y H:i',(int)$job['due_at'])).'</strong> (UTC+7)'.($job['channel']!==$channel?'<br><span class="hint">В ранее выбранный канал: '.h(telegram_channel_name($job['channel'])).'</span>':'').'</p>';
@@ -62,12 +72,19 @@ function telegram_editor(array $p,?array $delivery): void {
     echo '<label class="tg-footer-setting">Подпись и ссылка на блог<select class="user-input" name="telegram_footer">'.$footerOptions.'</select></label><p class="hint">В режиме «По категории» у остальных постов нет ни подписи «Гена и Винни», ни ссылки. Ссылка доступна только для опубликованного на сайте поста.</p>';
     if($needsCheck){
         echo '<p class="hint">Проверь этот пост в канале. Если он есть — укажи последнее число из ссылки на сообщение. Если удалён или отсутствует — укажи 0. Это только исправит привязку; публикация начнётся после отдельного нажатия отправки.</p><label><input type="checkbox" name="checked_channel" value="1"> Я проверил канал</label><label>Номер сообщения из ссылки; 0, если его нет<input class="user-input" type="number" name="message_id" min="0" value="0"></label><button class="btn-secondary" name="action" value="resolve">Сохранить результат проверки</button>';
-    }elseif(!$nontext){
+    }else{
+        if($nontext){
+            $mode=(string)($_POST['telegram_media_update']??$meta['update_mode']);$options='';
+            foreach(['auto'=>'Текст и вложение из редактора','caption'=>'Только текст — прежнее вложение оставить','photo'=>'Текст и фото из редактора','video'=>'Текст и видео из редактора'] as $key=>$label)$options.='<option value="'.$key.'"'.($mode===$key?' selected':'').'>'.h($label).'</option>';
+            $captionLength=telegram_units(telegram_media_document($p)['text']);
+            echo '<label>Обновление старого медиапоста<select class="user-input" name="telegram_media_update">'.$options.'</select></label><p class="hint">Подпись: <strong>'.$captionLength.' / 1024</strong> символа, включая заголовок и подпись блога. Один пост — одно вложение. Если в редакторе нет медиа, прежнее вложение останется. Ссылка на сообщение сохраняется.</p>';
+            if($captionLength>1024)echo '<p class="auth-error">Подпись слишком длинная. Сократи особый текст для канала или отключи подпись блога. До этого обновление остановится без изменений в Telegram.</p>';
+        }
         $disabled=$running||!$connected?' disabled':'';
         if(!$connected)echo '<p class="hint">Сначала подключи канал по ссылке выше.</p>';
         echo '<div class="tg-publish-actions"><button type="submit" class="btn-main" name="action" value="telegram"'.$disabled.'>'.($sent?'Обновить в Telegram':'Отправить сейчас').'</button><details class="tg-schedule-controls"><summary>'.($pending?'Изменить отложенную отправку':'Отложить отправку').'</summary><label>Дата и время · Новосибирск (UTC+7)<input class="user-input" type="datetime-local" name="telegram_due" value="'.h($due).'"'.$disabled.'></label><button type="submit" class="btn-secondary" name="action" value="telegram_schedule"'.$disabled.'>'.($pending?'Обновить отложенную отправку':'Запланировать отправку').'</button><p class="hint">Отправится версия текста на момент нажатия этой кнопки. После правок обнови отложенную отправку.</p></details></div><p class="hint">'.($sent?'Кнопка обновит существующее сообщение.':'Публикация на сайте не обязательна.').($custom?' Отправится особый текст для Telegram из настроек ниже.':' Отправится весь рассказ с фотографиями и видео.').($pending?' Отправка сейчас отменит ожидание по расписанию.':'').'</p>';
     }
-    if(!$delivery&&$connected)echo '<details class="tg-existing-post"><summary>Пост уже есть в этом канале?</summary><p class="hint">Открой нужное сообщение в выбранном канале, скопируй ссылку и возьми последнее число: например, в https://t.me/c/123456/35 номер сообщения — 35.</p><label>Тип существующего сообщения<select class="user-input" name="existing_message_kind"><option value="text">Текстовый пост или иллюстрация внутри текста</option><option value="media">Фото / видео с подписью — только привязка</option></select></label><label>Номер существующего сообщения<input class="user-input" type="number" name="existing_message_id" min="1" max="2147483647" step="1" placeholder="35"></label><label><input type="checkbox" name="existing_checked" value="1"> Я проверил: это тот же пост в выбранном канале</label><button type="submit" class="btn-secondary" name="action" value="telegram_bind">Привязать существующий пост</button><p class="hint">Привязка ничего не отправляет и не меняет в Telegram. Текстовый пост можно затем обновлять. Фото или видео с подписью останется привязанным, его редактируют вручную в Telegram. Удаление из админки относится к привязанному сообщению. Номер подтверждаешь ты — содержимое сообщения здесь не проверяется.</p></details>';
+    if(!$delivery&&$connected)echo '<details class="tg-existing-post"><summary>Пост уже есть в этом канале?</summary><p class="hint">Открой нужное сообщение в выбранном канале, скопируй ссылку и возьми последнее число: например, в https://t.me/c/123456/35 номер сообщения — 35.</p><label>Тип существующего сообщения<select class="user-input" name="existing_message_kind"><option value="text">Текстовый пост или иллюстрация внутри текста</option><option value="media">Фото / видео с подписью</option></select></label><label>Номер существующего сообщения<input class="user-input" type="number" name="existing_message_id" min="1" max="2147483647" step="1" placeholder="35"></label><label><input type="checkbox" name="existing_checked" value="1"> Я проверил: это тот же пост в выбранном канале</label><button type="submit" class="btn-secondary" name="action" value="telegram_bind">Привязать существующий пост</button><p class="hint">Привязка ничего не отправляет и не меняет в Telegram. Текстовый пост можно затем обновлять. Фото или видео с подписью обновляется в том же сообщении, с лимитом подписи 1024 символа. Удаление из админки относится к привязанному сообщению. Номер подтверждаешь ты — содержимое сообщения здесь не проверяется.</p></details>';
     echo '<details class="tg-content-options"><summary>'.($custom?'Особый текст для Telegram — включён':'Текст и предпросмотр').'</summary><p class="hint">По умолчанию отправляется рассказ из редактора. Поле ниже заменяет его текст только для Telegram.</p><label>Особый текст для канала (необязательно)<textarea class="user-input" name="telegram_text" rows="4" placeholder="Оставь пустым, чтобы отправить рассказ целиком">'.h($p['telegram_text']).'</textarea></label><details><summary>Предпросмотр сохранённого текста</summary><pre class="tg-preview">'.h(telegram_text($p)).'</pre></details></details>';
     if($history){
         echo '<details class="tg-schedule-history"><summary>История отправок — последние '.count($history).'</summary><p class="hint">Это прошлые задачи этого же поста, а не дополнительные публикации в очереди.</p><ul>';
