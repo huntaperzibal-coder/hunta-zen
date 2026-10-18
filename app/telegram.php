@@ -197,6 +197,10 @@ function telegram_request(string $method,array $payload): array {
 function telegram_state(int $id,string $channel,string $state,string $error=''): void {
     global $db;$db->prepare('UPDATE telegram_deliveries SET state=?,error=?,updated_at=? WHERE post_id=? AND channel=?')->execute([$state,$error,now(),$id,$channel]);
 }
+/** These edit failures require an explicit channel check, never a blind resend. */
+function telegram_invalid_message(string $error): bool {
+    return preg_match('/MESSAGE_ID_INVALID|message to edit not found/i',$error)===1;
+}
 function telegram_send(int $id,?callable $transport=null,?array $snapshot=null): void {
     global $config,$db,$storage;
     if(empty($config['telegram_token'])||empty($config['telegram_channel']))throw new RuntimeException('Подключи бота и канал в разделе Telegram.');
@@ -206,7 +210,7 @@ function telegram_send(int $id,?callable $transport=null,?array $snapshot=null):
         $current=post($id);if($current['status']!=='published')throw new RuntimeException('Сначала опубликуй запись на сайте.');
         $p=$snapshot??$current;$plan=telegram_plan($p);$channel=$config['telegram_channel'];
         $q=$db->prepare('SELECT * FROM telegram_deliveries WHERE post_id=? AND channel=?');$q->execute([$id,$channel]);$delivery=$q->fetch();
-        if($delivery && in_array($delivery['state'],['sending','unknown'],true))throw new RuntimeException('Результат прошлой отправки неизвестен. Проверь канал и укажи результат ниже.');
+        if($delivery && (in_array($delivery['state'],['sending','unknown'],true)||telegram_invalid_message($delivery['error'])))throw new RuntimeException('Результат прошлой отправки неизвестен. Проверь канал и укажи результат ниже.');
         // Adopt the original single text delivery without duplicating it after an upgrade.
         if(!empty($delivery['message_id']))$db->prepare("INSERT OR IGNORE INTO telegram_parts(post_id,channel,kind,ordinal,message_id,state) VALUES(?,?,'text',0,?,'sent')")->execute([$id,$channel,$delivery['message_id']]);
         $q=$db->prepare('SELECT * FROM telegram_parts WHERE post_id=? AND channel=?');$q->execute([$id,$channel]);$old=[];
@@ -245,7 +249,10 @@ function telegram_send(int $id,?callable $transport=null,?array $snapshot=null):
                     $db->prepare("UPDATE telegram_parts SET state='failed' WHERE post_id=? AND channel=? AND kind=? AND ordinal=?")->execute([$id,$channel,$part['kind'],$part['ordinal']]);
                     $reason=mb_substr(str_replace((string)$config['telegram_token'],'[токен скрыт]',strip_tags($description)),0,300);
                     $error='Telegram отклонил запрос ('.(int)($response['error_code']??0).')'.($reason!==''?': '.$reason:'. Проверь права бота и канал.');
-                    telegram_state($id,$channel,'failed',$error);
+                    if(!$delete&&$message&&telegram_invalid_message($description)){
+                        $error.=' Не удалось обновить сообщение №'.(int)$message.'. Проверь канал и исправь привязку ниже.';
+                        telegram_state($id,$channel,'unknown',$error);
+                    }else telegram_state($id,$channel,'failed',$error);
                     throw new RuntimeException($error.' Уже отправленные сообщения сохранены.');
                 }
             }
@@ -264,12 +271,13 @@ function telegram_resolve(int $id,int $message): void {
     global $db,$config,$storage;
     $lock=fopen($storage.'/telegram.lock','c');if(!$lock||!flock($lock,LOCK_EX|LOCK_NB))throw new RuntimeException('Отправка ещё идёт. Подожди.');
     try{
-        $channel=$config['telegram_channel'];$q=$db->prepare("SELECT * FROM telegram_parts WHERE post_id=? AND channel=? AND state='sending' LIMIT 1");$q->execute([$id,$channel]);$part=$q->fetch();
+        $channel=$config['telegram_channel'];$q=$db->prepare("SELECT * FROM telegram_parts WHERE post_id=? AND channel=? AND state IN ('sending','failed') ORDER BY CASE state WHEN 'sending' THEN 0 ELSE 1 END,kind DESC,ordinal LIMIT 1");$q->execute([$id,$channel]);$part=$q->fetch();
         if($part){
             if($part['operation']==='delete'){
                 if($message!==0)throw new RuntimeException('Для удаления проверь канал: укажи 0, если сообщение удалено.');
                 $db->prepare('DELETE FROM telegram_parts WHERE post_id=? AND channel=? AND kind=? AND ordinal=?')->execute([$id,$channel,$part['kind'],$part['ordinal']]);
             }else $db->prepare("UPDATE telegram_parts SET message_id=?,state='failed' WHERE post_id=? AND channel=? AND kind=? AND ordinal=?")->execute([$message?:null,$id,$channel,$part['kind'],$part['ordinal']]);
+            if($part['kind']==='text'&&(int)$part['ordinal']===0)$db->prepare('UPDATE telegram_deliveries SET message_id=? WHERE post_id=? AND channel=?')->execute([$message?:null,$id,$channel]);
             telegram_state($id,$channel,'failed','Проверено вручную. Нажми отправку, чтобы завершить все части.');
         }else{
             $q=$db->prepare('SELECT 1 FROM telegram_parts WHERE post_id=? AND channel=? LIMIT 1');$q->execute([$id,$channel]);

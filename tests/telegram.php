@@ -45,6 +45,16 @@ try{
     file_put_contents($dir.'/photos/'.$video,'test-only-mp4');clearstatcache();
     tg_assert(isset(telegram_plan($vp)[0]['videos'][$video]),'smaller video still accepted for Telegram');
     unlink($dir.'/photos/'.$video);tg_fails(fn()=>telegram_plan($vp),'missing video rejected before sending');
+    $repair=tg_post('repair','Привязка');$calls=[];telegram_send($repair['id'],$mock);
+    $calls=[];$reject=function($method,$payload)use(&$calls){$calls[]=[$method,$payload];return ['ok'=>false,'error_code'=>400,'description'=>'Bad Request: MESSAGE_ID_INVALID'];};
+    tg_fails(fn()=>telegram_send($repair['id'],$reject),'invalid message ID stops update');
+    tg_assert(count($calls)===1&&$calls[0][0]==='editMessageText','invalid edit never falls back to creating duplicate');
+    $db->prepare("UPDATE telegram_deliveries SET state='failed' WHERE post_id=?")->execute([$repair['id']]);
+    $q=$db->prepare('SELECT * FROM telegram_deliveries WHERE post_id=?');$q->execute([$repair['id']]);ob_start();telegram_editor($repair,$q->fetch());$repairUi=ob_get_clean();tg_assert(str_contains($repairUi,'value="resolve"'),'existing failed MESSAGE_ID_INVALID delivery exposes repair controls after upgrade');
+    $calls=[];tg_fails(fn()=>telegram_send($repair['id'],$mock),'invalid message ID blocks retry until reconciliation');tg_assert($calls===[],'blocked retry does not call API');
+    telegram_resolve($repair['id'],733);$calls=[];telegram_send($repair['id'],$mock);tg_assert(count($calls)===1&&$calls[0][1]['message_id']===733,'manual repair updates existing failed part with correct message ID');
+    tg_fails(fn()=>telegram_send($repair['id'],$reject),'deleted message requires reconciliation');
+    telegram_resolve($repair['id'],0);$calls=[];telegram_send($repair['id'],$mock);tg_assert(count($calls)===1&&$calls[0][0]==='sendRichMessage','explicit absence confirmation permits fresh send without restoring stale delivery ID');
     $p2=tg_post('unknown',str_repeat('я',6000));
     tg_fails(fn()=>telegram_send($p2['id'],fn()=>throw new RuntimeException('timeout')),'rich request timeout stops safely');
     tg_fails(fn()=>telegram_send($p2['id'],$mock),'unknown rich result blocks duplicate retry');telegram_resolve($p2['id'],502);$calls=[];telegram_send($p2['id'],$mock);tg_assert(array_column($calls,0)===['editMessageText'],'manual reconciliation edits known rich message');
