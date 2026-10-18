@@ -1,5 +1,5 @@
 """Real HTTP checks; no external requests or real Telegram credentials."""
-import base64, http.cookiejar, json, os, pathlib, re, socket, sqlite3, subprocess, tempfile, time, urllib.error, urllib.parse, urllib.request
+import random, struct, zlib, base64, http.cookiejar, json, os, pathlib, re, socket, sqlite3, subprocess, tempfile, time, urllib.error, urllib.parse, urllib.request
 ROOT=pathlib.Path(__file__).resolve().parents[1]
 PHP=os.environ.get('PHP_BIN','php')
 with tempfile.TemporaryDirectory(prefix='hunta-http-') as tmp:
@@ -70,19 +70,38 @@ with tempfile.TemporaryDirectory(prefix='hunta-http-') as tmp:
             boundary='hunta-test-boundary';fields={**data,'action':'upload','revision':revision,'photo_kind':'cover'}
             parts=[]
             for key,val in fields.items():parts.append(f'--{boundary}\r\nContent-Disposition: form-data; name="{key}"\r\n\r\n{val}\r\n'.encode())
-            png=base64.b64decode('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aX2kAAAAASUVORK5CYII=')
+            # A valid detailed image exercises real WebP output, not only a fallback.
+            def png_chunk(kind,payload):return struct.pack('>I',len(payload))+kind+payload+struct.pack('>I',zlib.crc32(kind+payload)&0xffffffff)
+            noise=random.Random(73)
+            raw=b''.join(b'\0'+noise.randbytes(800*3) for _ in range(450))
+            png=b'\x89PNG\r\n\x1a\n'+png_chunk(b'IHDR',struct.pack('>IIBBBBB',800,450,8,2,0,0,0))+png_chunk(b'IDAT',zlib.compress(raw))+png_chunk(b'IEND',b'')
             parts.append(f'--{boundary}\r\nContent-Disposition: form-data; name="photo"; filename="photo.png"\r\nContent-Type: image/png\r\n\r\n'.encode()+png+b'\r\n')
             parts.append(f'--{boundary}--\r\n'.encode())
             _,html,_=request('/admin.php',b''.join(parts),headers={'Content-Type':f'multipart/form-data; boundary={boundary}'})
             photos=list((storage/'photos').iterdir());assert len(photos)==1,'upload'
             photo=photos[0].name
             assert request('/media.php?file='+photo,opener=anonymous)[0]==404,'draft cover hidden'
+            assert request('/media.php?file='+photo+'&width=480',opener=anonymous)[0]==404,'draft derivative hidden'
+            assert not (storage/'image-cache').exists(),'draft request never generates derivatives'
             assert request('/media.php?file=../../config.php',opener=anonymous)[0]==404,'traversal blocked'
             revision=re.search(r'name="revision" value="(\d+)"',html)[1]
             data.update(action='publish',revision=revision)
             _,html,_=request('/admin.php',data)
             public=request('/',opener=anonymous)[1];assert 'Очень личный черновик' in public and '<script>x</script>' not in public,'published and escaped'
             assert request('/media.php?file='+photo,opener=anonymous)[0]==200,'published cover visible'
+            assert request('/media.php?file='+photo+'&width=480',opener=anonymous)[0]==200,'published derivative or safe original fallback'
+            assert request('/media.php?file='+photo+'&width=12345',opener=anonymous)[0]==400,'only bounded image sizes accepted'
+            if 'srcset=' in public:
+                with anonymous.open(base+'/media.php?file='+photo+'&width=480') as response:
+                    derivative=response.read();assert response.headers.get('Content-Type')=='image/webp' and len(derivative)<len(png),'real public WebP is smaller'
+                assert list((storage/'image-cache/reader-v1').glob('*.webp')),'public request cached a derivative'
+                with anonymous.open(urllib.request.Request(base+'/media.php?file='+photo+'&width=480',headers={'Range':'bytes=0-11'})) as response:
+                    assert response.status==206 and response.read()==derivative[:12],'derivative range offsets describe derivative bytes'
+                with anonymous.open(base+'/media.php?file='+photo) as response:assert response.read()==png,'full-resolution endpoint unchanged'
+            assert 'data-original=' in public,'public image keeps original lightbox URL'
+            with sqlite3.connect(storage/'blog.sqlite') as records:records.execute("UPDATE posts SET status='draft' WHERE id=?",[pid])
+            assert request('/media.php?file='+photo+'&width=480',opener=anonymous)[0]==404,'previously accessible derivative closes with post'
+            with sqlite3.connect(storage/'blog.sqlite') as records:records.execute("UPDATE posts SET status='published' WHERE id=?",[pid])
             stale={**data,'action':'autosave','body':'overwrite attempt'}
             assert request('/admin.php',stale)[0]==409,'HTTP conflict'
             assert 'overwrite attempt' not in request('/',opener=anonymous)[1]

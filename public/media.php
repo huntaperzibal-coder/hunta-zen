@@ -8,7 +8,15 @@ $q=$db->prepare("SELECT 1 FROM posts WHERE status='published' AND (cover=? OR in
 $profile=in_array($name,array_filter([reader_public_photo('author_photo'),reader_public_photo('support_qr')]),true);
 if (!$q->fetchColumn() && !$profile && !authenticated()) { http_response_code(404);exit; }
 $file=$storage.'/photos/'.$name; if (!is_file($file)) { http_response_code(404); exit; }
-header('Content-Type: '.['jpg'=>'image/jpeg','png'=>'image/png','webp'=>'image/webp','mp4'=>'video/mp4'][$m[1]]);
+if(session_status()===PHP_SESSION_ACTIVE)session_write_close();
+$mime=['jpg'=>'image/jpeg','png'=>'image/png','webp'=>'image/webp','mp4'=>'video/mp4'][$m[1]];
+if(isset($_GET['width'])){
+    $width=(string)$_GET['width'];
+    if($m[1]==='mp4'||!in_array($width,array_map('strval',READER_IMAGE_WIDTHS),true)){http_response_code(400);exit;}
+    $variant=reader_image_variant($name,(int)$width);
+    if($variant!==$file){$file=$variant;$mime='image/webp';}
+}
+header('Content-Type: '.$mime);
 header('X-Content-Type-Options: nosniff');header('Cache-Control: private, no-store');
 if(session_status()===PHP_SESSION_ACTIVE)session_write_close();
 $size=filesize($file);$range=media_byte_range((string)($_SERVER['HTTP_RANGE']??''),$size);

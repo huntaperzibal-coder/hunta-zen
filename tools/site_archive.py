@@ -36,7 +36,7 @@ def build_archive(options):
                 def walk(base,prefix,is_data=False):
                     for current,dirs,files in os.walk(base,followlinks=False):
                         current=pathlib.Path(current);relative=current.relative_to(base)
-                        dirs[:]=[d for d in sorted(dirs) if d not in (['backups','zen_backups','__pycache__'] if is_data else ['.git','__pycache__']) and (current/d).resolve() not in [storage,directory]]
+                        dirs[:]=[d for d in sorted(dirs) if d not in (['backups','zen_backups','image-cache','__pycache__'] if is_data else ['.git','__pycache__']) and (current/d).resolve() not in [storage,directory]]
                         for name in dirs[:]:
                             path=current/name
                             if path.is_symlink():add_file(path,str(pathlib.PurePosixPath(prefix)/relative/name));dirs.remove(name)

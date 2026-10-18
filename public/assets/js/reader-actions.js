@@ -8,7 +8,7 @@
   let images = [], position = 0, opener = null;
   const draw = () => {
     const source = images[position];
-    image.src = source.currentSrc || source.src;
+    image.src = source.dataset.original || source.currentSrc || source.src;
     image.alt = source.alt || 'Иллюстрация к посту';
     const description = source.closest('figure')?.querySelector('figcaption')?.textContent || source.alt || '';
     caption.textContent = description + (images.length > 1 ? ` · ${position + 1} / ${images.length}` : '');
@@ -82,7 +82,7 @@
     const source = event.target.closest('.story img') || event.target.closest('[data-lightbox-image], .story-image-link')?.querySelector('img');
     if (!source || !lightbox.showModal || event.ctrlKey || event.metaKey || event.shiftKey || event.altKey) return;
     const link = source.closest('a');
-    if (link && !link.classList.contains('story-image-link') && link.href !== source.src) return;
+    if (link && !link.classList.contains('story-image-link') && link.href !== source.src && link.href !== new URL(source.dataset.original || source.src, location.href).href) return;
     event.preventDefault();
     images = source.closest('.story') ? [...source.closest('.story').querySelectorAll('img')] : [source];
     position = images.indexOf(source); opener = link || source;

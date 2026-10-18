@@ -11,7 +11,7 @@ jobs:
       - uses: shivammathur/setup-php@v2
         with:
           php-version: ${{ matrix.php }}
-          extensions: pdo_sqlite, mbstring, curl, fileinfo, dom
+          extensions: pdo_sqlite, mbstring, curl, fileinfo, dom, gd, exif
           coverage: none
           ini-values: opcache.enable_cli=1, opcache.jit=0
       - run: find app public tools tests -name '*.php' -exec php -l {} \;
@@ -20,6 +20,7 @@ jobs:
       - run: php tests/seo.php
       - run: php tests/core.php
       - run: php tests/video.php
+      - run: php tests/reader_images.php
       - run: php tests/post_management.php
       - run: php tests/telegram_media.php
       - run: php tests/telegram_channels.php

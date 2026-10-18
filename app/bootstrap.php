@@ -37,6 +37,7 @@ require_once __DIR__ . '/database_backup.php';
 require_once __DIR__ . '/github_ui.php';
 require_once __DIR__ . '/rich_text.php';
 require_once __DIR__ . '/video.php';
+require_once __DIR__ . '/reader_images.php';
 require_once __DIR__ . '/categories.php';
 require_once __DIR__ . '/orda_auth.php';
 require_once __DIR__ . '/dao_brand.php';

@@ -43,8 +43,8 @@ foreach($stories as $p){
     echo '<div class="story-actions" data-post-url="'.h($postUrl).'" data-post-title="'.h($p['title']).'"><button type="button" class="story-action" data-share hidden aria-label="Скопировать ссылку на запись «'.h($p['title']).'»" title="Скопировать ссылку"><svg class="share-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><path d="m8.6 10.5 6.8-4m-6.8 7 6.8 4"/></svg><svg class="copied-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="m5 12 4 4L19 6"/></svg></button></div>';
     echo '</div>'.($current?'<h1>':'<h2><a href="/?p='.h(rawurlencode($p['slug'])).'">').h($p['title']).($current?'</h1>':'</a></h2>');
     if($current)echo '<p class="story-author"><a href="/feedback.php">'.h(setting('author_name','Hunta')).'</a></p>';
-    if($p['cover'])echo '<a class="story-image-link" href="'.h(photo_url($p['cover'])).'" target="_blank" rel="noopener" aria-label="Открыть иллюстрацию полностью"><img loading="lazy" class="cover" src="'.h(photo_url($p['cover'])).'" alt="Иллюстрация к истории «'.h($p['title']).'»"></a>';
-    echo '<div class="prose">'.render_body($p['body']).'</div><div class="story-ending" aria-hidden="true"><span class="story-ending-mark"></span></div></article>';
+    if($p['cover'])echo '<a class="story-image-link" href="'.h(photo_url($p['cover'])).'" target="_blank" rel="noopener" aria-label="Открыть иллюстрацию полностью"><img loading="lazy" class="cover" '.reader_image_attributes($p['cover'],true).' alt="Иллюстрация к истории «'.h($p['title']).'»"></a>';
+    echo '<div class="prose">'.reader_body_images(render_body($p['body'])).'</div><div class="story-ending" aria-hidden="true"><span class="story-ending-mark"></span></div></article>';
 }
 if(!$current){
     $suffix=$category?'&amp;category='.h(rawurlencode($category['slug'])):'';
@@ -55,5 +55,5 @@ if(!$current){
         echo '</nav>';
     }
 }
-echo '</section></div><p id="reader-action-status" class="reader-toast" role="status" aria-live="polite"></p><dialog id="reader-lightbox" class="reader-lightbox" aria-label="Просмотр иллюстраций"><button type="button" class="lightbox-close" aria-label="Закрыть изображение">×</button><button type="button" class="lightbox-prev" aria-label="Предыдущее изображение">‹</button><div class="lightbox-stage"><img alt=""><p class="lightbox-caption"></p></div><button type="button" class="lightbox-next" aria-label="Следующее изображение">›</button></dialog><script src="/assets/js/reader-actions.js?v=5" defer></script><script src="/assets/js/reader-feed.js?v=1" defer></script>';
+echo '</section></div><p id="reader-action-status" class="reader-toast" role="status" aria-live="polite"></p><dialog id="reader-lightbox" class="reader-lightbox" aria-label="Просмотр иллюстраций"><button type="button" class="lightbox-close" aria-label="Закрыть изображение">×</button><button type="button" class="lightbox-prev" aria-label="Предыдущее изображение">‹</button><div class="lightbox-stage"><img alt=""><p class="lightbox-caption"></p></div><button type="button" class="lightbox-next" aria-label="Следующее изображение">›</button></dialog><script src="/assets/js/reader-actions.js?v=6" defer></script><script src="/assets/js/reader-feed.js?v=1" defer></script>';
 page_end();

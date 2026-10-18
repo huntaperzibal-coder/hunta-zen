@@ -8,6 +8,7 @@ with tempfile.TemporaryDirectory(prefix='zen-site-test-') as tmp:
     (site/'public/index.php').write_text('<?php echo "Site";');(site/'.git/history').write_text('history excluded')
     (storage/'photos/photo.png').write_bytes(b'photo-data');(storage/'photos/video.mp4').write_bytes(b'video-data')
     (storage/'references/hero.png').write_bytes(b'reference-data');(storage/'backups/old/blog.sqlite').write_bytes(b'old-backup')
+    (storage/'image-cache').mkdir();(storage/'image-cache/derived.webp').write_bytes(b'disposable')
     (storage/'app.log').write_text('private log excluded');(storage/'illustrator-key').write_text('test-key')
     config={'storage':str(storage),'site_url':'https://example.test','database_backup_dir':str(copies)}
     (storage/'config.php').write_text('<?php return json_decode('+repr(json.dumps(config))+',true);')
@@ -20,7 +21,7 @@ with tempfile.TemporaryDirectory(prefix='zen-site-test-') as tmp:
         names=archive.getnames();manifest=json.load(archive.extractfile('backup-manifest.json'))
         required=['site/public/index.php','data/photos/photo.png','data/photos/video.mp4','data/references/hero.png','data/illustrator-key','configuration/config.php','data/blog.sqlite','RESTORE.txt']
         assert all(name in names for name in required),names
-        assert not any('.git/' in name or '/backups/' in name or name.endswith('.log') for name in names)
+        assert not any('.git/' in name or '/backups/' in name or '/image-cache/' in name or name.endswith('.log') for name in names)
         for name,item in manifest['files'].items():
             data=archive.extractfile(name).read();assert len(data)==item['size'] and hashlib.sha256(data).hexdigest()==item['sha256']
     options['download']=False

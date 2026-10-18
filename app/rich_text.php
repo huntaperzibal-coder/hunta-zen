@@ -15,7 +15,7 @@ function article_photo_name(string $url): ?string {
     global $config;
     $base=rtrim($config['site_url'],'/');
     if (str_starts_with($url,$base.'/')) $url=substr($url,strlen($base));
-    return preg_match('~^/media\.php\?file=([a-f0-9]{32}\.(?:jpg|png|webp))$~D',$url,$m)?$m[1]:null;
+    return preg_match('~^/media\.php\?file=([a-f0-9]{32}\.(?:jpg|png|webp))(?:&width=(?:480|960|1440))?$~D',$url,$m)?$m[1]:null;
 }
 function sanitize_article_html(string $html): string {
     if (!class_exists('DOMDocument')) throw new RuntimeException('Для визуального редактора нужно расширение PHP DOM.');
