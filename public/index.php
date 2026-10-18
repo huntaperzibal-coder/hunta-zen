@@ -55,5 +55,5 @@ if(!$current){
         echo '</nav>';
     }
 }
-echo '</section></div><p id="reader-action-status" class="reader-toast" role="status" aria-live="polite"></p><dialog id="reader-lightbox" class="reader-lightbox" aria-label="Просмотр иллюстраций"><button type="button" class="lightbox-close" aria-label="Закрыть изображение">×</button><button type="button" class="lightbox-prev" aria-label="Предыдущее изображение">‹</button><div class="lightbox-stage"><img alt=""><p class="lightbox-caption"></p></div><button type="button" class="lightbox-next" aria-label="Следующее изображение">›</button></dialog><script src="/assets/js/reader-actions.js?v=4" defer></script>';
+echo '</section></div><p id="reader-action-status" class="reader-toast" role="status" aria-live="polite"></p><dialog id="reader-lightbox" class="reader-lightbox" aria-label="Просмотр иллюстраций"><button type="button" class="lightbox-close" aria-label="Закрыть изображение">×</button><button type="button" class="lightbox-prev" aria-label="Предыдущее изображение">‹</button><div class="lightbox-stage"><img alt=""><p class="lightbox-caption"></p></div><button type="button" class="lightbox-next" aria-label="Следующее изображение">›</button></dialog><script src="/assets/js/reader-actions.js?v=5" defer></script><script src="/assets/js/reader-feed.js?v=1" defer></script>';
 page_end();

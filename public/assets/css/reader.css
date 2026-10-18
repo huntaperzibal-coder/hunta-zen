@@ -40,3 +40,9 @@
 .blog .author-message .feedback-check input{width:76px;flex:0 0 76px;margin:0;min-height:40px}
 
 .blog .reader-service-page .reader-page-nav a,.blog .reader-service-page .reader-page-nav .back{font:400 13px/1.5 system-ui;letter-spacing:normal}
+
+/* Keep navigation available while reading, with room for anchors and filters. */
+:root{--reader-header-height:66px;scroll-padding-top:calc(var(--reader-header-height) + 12px)}
+.blog>header{position:sticky;top:0;z-index:30;width:100%;max-width:none;height:var(--reader-header-height);min-height:var(--reader-header-height);padding-inline:max(22px,calc((100% - 1100px)/2 + 22px));background:var(--color-bg)}
+.reading-sidebar{top:calc(var(--reader-header-height) + 18px)}
+@media(max-width:760px){:root{--reader-header-height:64px}.blog>header{padding-inline:12px}}

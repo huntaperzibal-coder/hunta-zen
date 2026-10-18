@@ -30,6 +30,7 @@
     document.body.classList.remove('lightbox-open'); image.removeAttribute('src');
     opener?.focus({preventScroll: true});
   });
+  const prepare = () => {
   document.querySelectorAll('.story-image-link, .story .prose img').forEach(node => {
     if (node.tagName === 'IMG' && !node.closest('a')) {
       node.tabIndex = 0; node.setAttribute('role', 'button');
@@ -39,6 +40,10 @@
       });
     }
   });
+  document.querySelectorAll('[data-share]').forEach(button => { button.hidden = false; });
+  };
+  prepare();
+  document.addEventListener('reader:feed-updated', prepare);
   const copy = async url => {
     if (navigator.clipboard?.writeText) {
       try { await navigator.clipboard.writeText(url); return true; } catch (_) {}
@@ -54,7 +59,6 @@
     return copied;
   };
   const feedbackTimers = new WeakMap();
-  document.querySelectorAll('[data-share]').forEach(button => { button.hidden = false; });
   document.addEventListener('click', async event => {
     const action = event.target.closest('[data-share]');
     if (action) {
