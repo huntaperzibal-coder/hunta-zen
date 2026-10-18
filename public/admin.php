@@ -23,7 +23,7 @@ if ($_SERVER['REQUEST_METHOD']==='POST') {
     } else {
         guard();
         try {
-            $needsDestination=in_array($action,['telegram','telegram_schedule','telegram_cancel','resolve'],true)||($action==='post_manage'&&($_POST['command']??'')==='telegram_delete');
+            $needsDestination=in_array($action,['telegram','telegram_schedule','telegram_cancel','telegram_bind','resolve'],true)||($action==='post_manage'&&($_POST['command']??'')==='telegram_delete');
             if($needsDestination&&count(telegram_channels())>1&&empty($_POST['telegram_destination']))throw new RuntimeException('Открой редактор заново и выбери канал перед действием.');
             if(isset($_POST['telegram_destination'])&&$_POST['telegram_destination']!=='')telegram_select_channel((string)$_POST['telegram_destination']);
             if($action==='telegram_default'){
@@ -72,7 +72,7 @@ if ($_SERVER['REQUEST_METHOD']==='POST') {
                 illustration_result((int)$applyId,(int)($_POST['id']??0));
                 $action='illustration_apply';
             }
-            if (in_array($action,['illustration_delete','illustration_dispatch','illustrate','illustration_apply','save','autosave','publish','unpublish','upload','telegram','telegram_schedule','telegram_cancel','telegram_select','resolve'],true)) {
+            if (in_array($action,['illustration_delete','illustration_dispatch','illustrate','illustration_apply','save','autosave','publish','unpublish','upload','telegram','telegram_schedule','telegram_cancel','telegram_select','telegram_bind','resolve'],true)) {
                 $id=(int)($_POST['id']??0);
                 $input=$_POST;
                 if ($action==='publish') $input['status']='published';
@@ -90,6 +90,7 @@ if ($_SERVER['REQUEST_METHOD']==='POST') {
                     } else $db->prepare('UPDATE posts SET cover=?,revision=revision+1 WHERE id=?')->execute([$name,$id]);
                 }
                 if($action==='telegram_select'){telegram_select_channel((string)($_POST['telegram_next_channel']??''));redirect('/admin.php?view=edit&id='.$id.telegram_channel_query().'#telegram');}
+                if($action==='telegram_bind')telegram_bind_existing($id,trim((string)($_POST['existing_message_id']??'')),!empty($_POST['existing_checked']));
                 if ($action==='telegram') { telegram_cancel_schedule($id,(string)$config['telegram_channel']);telegram_send($id); }
                 if ($action==='telegram_schedule') telegram_schedule_post($id,(string)($_POST['telegram_due']??''));
                 if ($action==='telegram_cancel') $cancelledCount=telegram_cancel_schedule($id,(string)$config['telegram_channel']);
@@ -103,7 +104,7 @@ if ($_SERVER['REQUEST_METHOD']==='POST') {
                     header('Content-Type: application/json');echo json_encode(['revision'=>$p['revision'],'html'=>$html,'message'=>$action==='telegram_cancel'?($cancelledCount>0?'Ожидающая отправка отменена.':'Ожидающей отправки уже нет. Состояние обновлено ниже.'):'Отправка запланирована на '.date('d.m.Y H:i',DateTimeImmutable::createFromFormat('!Y-m-d\TH:i',$_POST['telegram_due'],new DateTimeZone('Asia/Novosibirsk'))->getTimestamp()).' (UTC+7).'],JSON_UNESCAPED_UNICODE|JSON_THROW_ON_ERROR);exit;
                 }
                 if ($action==='autosave') { header('Content-Type: application/json'); echo json_encode(['revision'=>$p['revision'],'saved'=>date('H:i:s')]);exit; }
-                redirect('/admin.php?view=edit&id='.$id.'&saved=1'.telegram_channel_query().(in_array($action,['illustration_delete','illustration_dispatch','illustrate','illustration_apply'],true)?'#illustrations':(in_array($action,['telegram','telegram_schedule','telegram_cancel','telegram_select','resolve'],true)?'#telegram':'' )));
+                redirect('/admin.php?view=edit&id='.$id.'&saved=1'.telegram_channel_query().(in_array($action,['illustration_delete','illustration_dispatch','illustrate','illustration_apply'],true)?'#illustrations':(in_array($action,['telegram','telegram_schedule','telegram_cancel','telegram_select','telegram_bind','resolve'],true)?'#telegram':'' )));
             }
             if ($action==='settings') {
                 $title=trim((string)($_POST['title']??''));if ($title==='') throw new RuntimeException('У сайта должно быть название.');

@@ -293,3 +293,26 @@ function telegram_resolve(int $id,int $message): void {
         audit('telegram:manual-check',$id);
     }finally{flock($lock,LOCK_UN);fclose($lock);}
 }
+
+/** Manual adoption only: records an author's checked message, never calls Telegram. */
+function telegram_bind_existing(int $id,string $number,bool $checked): void {
+    global $db,$config,$storage;
+    if(!$checked)throw new RuntimeException('Сначала проверь сообщение в выбранном канале и отметь подтверждение.');
+    if(!preg_match('/^[1-9][0-9]{0,9}$/D',$number)||(int)$number>2147483647)throw new RuntimeException('Укажи номер сообщения — последнее число из ссылки на пост.');
+    $channel=(string)($config['telegram_channel']??'');
+    if($channel===''||empty($config['telegram_token']))throw new RuntimeException('Сначала подключи канал.');
+    $lock=fopen($storage.'/telegram.lock','c');if(!$lock||!flock($lock,LOCK_EX|LOCK_NB))throw new RuntimeException('Сейчас идёт отправка. Дождись завершения.');
+    try{
+        $db->beginTransaction();
+        $q=$db->prepare("SELECT 1 FROM telegram_schedule WHERE post_id=? AND channel=? AND state IN ('scheduled','running')");$q->execute([$id,$channel]);
+        if($q->fetchColumn())throw new RuntimeException('Сначала отмени отложенную отправку в этот канал.');
+        $q=$db->prepare('SELECT 1 FROM telegram_deliveries WHERE post_id=? AND channel=? UNION SELECT 1 FROM telegram_parts WHERE post_id=? AND channel=?');$q->execute([$id,$channel,$id,$channel]);
+        if($q->fetchColumn())throw new RuntimeException('У этого поста уже есть история отправки в канал. Используй обновление или проверку результата.');
+        $q=$db->prepare('SELECT 1 FROM telegram_deliveries WHERE channel=? AND message_id=? UNION SELECT 1 FROM telegram_parts WHERE channel=? AND message_id=?');$q->execute([$channel,(int)$number,$channel,(int)$number]);
+        if($q->fetchColumn())throw new RuntimeException('Это сообщение уже привязано к другому посту.');
+        $db->prepare("INSERT INTO telegram_deliveries(post_id,channel,message_id,state,updated_at) VALUES(?,?,?,'sent',?)")->execute([$id,$channel,(int)$number,now()]);
+        $db->prepare("INSERT INTO telegram_parts(post_id,channel,kind,ordinal,message_id,state) VALUES(?,?,'text',0,?,'sent')")->execute([$id,$channel,(int)$number]);
+        $db->commit();audit('telegram:existing-bound',$id);
+    }catch(Throwable $e){if($db->inTransaction())$db->rollBack();throw $e;}
+    finally{flock($lock,LOCK_UN);fclose($lock);}
+}

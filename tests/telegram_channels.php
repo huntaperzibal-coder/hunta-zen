@@ -7,7 +7,7 @@ require dirname(__DIR__).'/app/bootstrap.php';$db->exec(file_get_contents(ROOT.'
 function channels_check(bool $ok,string $label):void{if(!$ok)throw new RuntimeException($label);echo 'OK: '.$label."\n";}
 try{
     $db->prepare("INSERT INTO posts(slug,title,body,created_at,updated_at) VALUES('two','Один пост','Общий текст',?,?)")->execute([now(),now()]);$id=(int)$db->lastInsertId();
-    $calls=[];$mock=function($method,$payload)use(&$calls,$config){$calls[]=[$method,$payload,$GLOBALS['config']['telegram_token']];return ['ok'=>true,'result'=>['message_id'=>count($calls)+100]];};
+    $calls=[];$mock=function($method,$payload)use(&$calls,$config){$calls[]=[$method,$payload,$GLOBALS['config']['telegram_token']];return ['ok'=>true,'result'=>['message_id'=>$payload['message_id']??(count($calls)+100)]];};
     telegram_send($id,$mock);
     $token2='654321:'.str_repeat('b',35);
     $readCalls=[];$readOnly=function($method,$payload)use(&$readCalls){$readCalls[]=$method;return ['ok'=>true,'result'=>match($method){'getMe'=>['id'=>10,'username'=>'main_bot'],'getChat'=>['id'=>-100222,'type'=>'channel','title'=>'Основной канал'],'getChatMember'=>['status'=>'administrator','can_post_messages'=>true,'can_edit_messages'=>true]}];};
@@ -27,5 +27,14 @@ try{
     $states->execute([$id,'-100222']);channels_check(count($calls)===1&&$calls[0][1]['chat_id']==='-100111'&&$states->fetchColumn()==='sent','selected channel deletion preserves main publication');
     telegram_store_channel(telegram_channels()['-100111'],true);$saved=require $dir.'/telegram-connection.php';channels_check($saved['telegram_channel']==='-100111'&&count($saved['telegram_channels'])===2,'default can change without losing channels');
     telegram_select_channel('-100222');ob_start();telegram_editor(post($id),null);$html=ob_get_clean();channels_check(str_contains($html,'Основной')&&str_contains($html,'Тестовый')&&!str_contains($html,$token2),'editor has independent statuses without exposing secrets');
+    telegram_select_channel('-100111');
+    try{telegram_bind_existing($id,'35',false);throw new LogicException('unchecked adoption accepted');}catch(RuntimeException $e){channels_check(true,'manual check required before adoption');}
+    telegram_bind_existing($id,'35',true);$states->execute([$id,'-100111']);channels_check($states->fetchColumn()==='sent','existing message adopted without publishing');
+    $calls=[];telegram_send($id,$mock);channels_check(count($calls)===1&&($calls[0][1]['message_id']??null)===35,'adopted post edits exact message instead of sending duplicate');
+    $db->prepare("INSERT INTO posts(slug,title,body,created_at,updated_at) VALUES('other','Другой пост','Текст',?,?)")->execute([now(),now()]);$other=(int)$db->lastInsertId();
+    try{telegram_bind_existing($other,'35',true);throw new LogicException('duplicate binding accepted');}catch(RuntimeException $e){channels_check(true,'one Telegram message cannot bind to two posts');}
+    telegram_schedule_post($other,date('Y-m-d\TH:i',time()+3600));
+    try{telegram_bind_existing($other,'36',true);throw new LogicException('pending adoption accepted');}catch(RuntimeException $e){channels_check(true,'scheduled destination must be cancelled before adoption');}
+    telegram_select_channel('-100222');
     try{telegram_select_channel('-100999');throw new LogicException('unknown channel accepted');}catch(RuntimeException $e){channels_check($config['telegram_channel']==='-100222','unknown destination rejected without changing context');}
 }finally{$db=null;$walk=function($path)use(&$walk){foreach(glob($path.'/*') as $f){if(is_dir($f))$walk($f);else unlink($f);}rmdir($path);};$walk($dir);}

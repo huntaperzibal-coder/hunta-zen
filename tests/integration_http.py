@@ -342,6 +342,14 @@ with tempfile.TemporaryDirectory(prefix='hunta-http-') as tmp:
             assert 'Канал: <strong>Тестовый</strong>' in request('/admin.php?view=edit&id='+str(ids[1])+'&channel=-100100')[1],'explicit old tab keeps its channel after default changes'
             with sqlite3.connect(storage/'blog.sqlite') as records:
                 assert records.execute("SELECT message_id FROM telegram_deliveries WHERE post_id=? AND channel='-100100'",[ids[1]]).fetchone()[0]==999,'connection selection preserves test delivery history'
+            _,to_bind,_=request('/admin.php?view=edit&id='+str(ids[1])+'&channel=-100200')
+            assert 'Привязать существующий пост' in to_bind,'new destination offers manual adoption'
+            assert 'Запустить ожидающую очередь' not in to_bind,'manual illustrator queue button removed'
+            bind={'action':'telegram_bind','csrf':csrf,'id':ids[1],'revision':re.search(r'name="revision" value="(\d+)"',to_bind)[1],'title':'Общий пост','body':'Текст','body_format':'html','telegram_destination':'-100200','existing_message_id':'35','existing_checked':'1'}
+            code,bound,bound_url=request('/admin.php',bind)
+            assert code==200 and bound_url.endswith('#telegram') and 'channel=-100200' in bound_url and 'Обновить в Telegram' in bound,'adoption returns to same channel and offers update'
+            with sqlite3.connect(storage/'blog.sqlite') as records:
+                assert records.execute("SELECT message_id FROM telegram_deliveries WHERE post_id=? AND channel='-100200'",[ids[1]]).fetchone()[0]==35,'manual message id stored without external request'
             print('OK: HTTP login, CSRF, drafts, upload, private media, publishing, XSS, conflicts, backup')
         finally:
             server.terminate();server.wait(timeout=5)
