@@ -20,6 +20,17 @@ foreach($q as $row){
     if($row['error']!=='')echo '  '.telegram_safe_error($row['error'])."\n";
 }
 if(in_array('--offline',$argv,true)){echo "Проверка связи пропущена (--offline). Ничего не отправлено.\n";exit;}
+if(in_array('--network',$argv,true)){
+    if(!function_exists('curl_init')){echo "Нужно расширение PHP cURL.\n";exit(1);}
+    echo "Проверка HTTPS до Telegram без токена бота и без публикаций:\n";
+    foreach(['Обычное соединение'=>CURL_IPRESOLVE_WHATEVER,'Только IPv4'=>CURL_IPRESOLVE_V4] as $label=>$resolve){
+        $curl=curl_init('https://api.telegram.org/');
+        curl_setopt_array($curl,[CURLOPT_NOBODY=>true,CURLOPT_RETURNTRANSFER=>true,CURLOPT_CONNECTTIMEOUT=>10,CURLOPT_TIMEOUT=>15,CURLOPT_FOLLOWLOCATION=>false,CURLOPT_PROTOCOLS=>CURLPROTO_HTTPS,CURLOPT_IPRESOLVE=>$resolve]);
+        curl_exec($curl);$errno=curl_errno($curl);$status=(int)curl_getinfo($curl,CURLINFO_HTTP_CODE);$seconds=(float)curl_getinfo($curl,CURLINFO_TOTAL_TIME);$timing=telegram_transport_timing($curl);curl_close($curl);
+        echo $label.': '.($errno===0&&$status>0?'HTTPS-соединение установлено; HTTP '.$status.'; '.number_format($seconds,1,'.','').' с.':telegram_transport_detail('HEAD',$errno,$status,$seconds,$timing))."\n";
+    }
+    echo "Токен не использовался. Посты и очередь не изменялись.\n";exit;
+}
 if(empty($config['telegram_token'])){echo "Ключ бота не задан. Проверка связи пропущена.\n";exit;}
 if(!function_exists('curl_init')){echo "В этой версии PHP нет расширения cURL.\n";exit(1);}
 echo "Проверка связи getMe (без публикации):\n";

@@ -180,10 +180,19 @@ function telegram_safe_error(string $message): string {
     $message=preg_replace('~[0-9]{5,}:[A-Za-z0-9_-]{20,}~','[токен скрыт]',$message)??'';
     return mb_substr(trim(preg_replace('/[\x00-\x20\x7f]+/u',' ',strip_tags($message))??''),0,800);
 }
-function telegram_transport_detail(string $method,int $errno,int $status,float $seconds): string {
+function telegram_transport_detail(string $method,int $errno,int $status,float $seconds,array $timing=[]): string {
     $reason=match($errno){5,6=>'не удалось определить адрес сервера',7=>'не удалось подключиться',28=>'истекло время ожидания',35=>'ошибка TLS',51,60=>'ошибка сертификата',52=>'пустой ответ сервера',55,56=>'соединение прервано',0=>$status>=500?'ошибка сервера Telegram':'ответ Telegram не распознан',default=>'сбой соединения'};
     $method=preg_replace('/[^A-Za-z]/','',$method)??'';
-    return $method.': '.$reason.'; cURL '.$errno.'; HTTP '.$status.'; '.number_format($seconds,1,'.','').' с.';
+    $detail=$method.': '.$reason.'; cURL '.$errno.'; HTTP '.$status.'; '.number_format($seconds,1,'.','').' с.';
+    if($timing){
+        $stage=$status>0?'получен HTTP-ответ':((float)($timing['tls']??0)>0?'ожидание HTTP-ответа':((float)($timing['tcp']??0)>0?'TLS':((float)($timing['dns']??0)>0?'TCP':'DNS / начало соединения')));
+        $detail.=' Этап: '.$stage.'. DNS '.number_format((float)($timing['dns']??0),3,'.','').'; TCP '.number_format((float)($timing['tcp']??0),3,'.','').'; TLS '.number_format((float)($timing['tls']??0),3,'.','').' с; передано '.max(0,(int)($timing['uploaded']??0)).' байт.';
+    }
+    return $detail;
+}
+/** Deliberately excludes URL, headers, token and response contents. Times are cumulative. */
+function telegram_transport_timing(CurlHandle $curl): array {
+    return ['dns'=>(float)curl_getinfo($curl,CURLINFO_NAMELOOKUP_TIME),'tcp'=>(float)curl_getinfo($curl,CURLINFO_CONNECT_TIME),'tls'=>(float)curl_getinfo($curl,CURLINFO_APPCONNECT_TIME),'uploaded'=>(int)curl_getinfo($curl,CURLINFO_SIZE_UPLOAD)];
 }
 /** Raw response is never logged: URL contains the bot token. */
 function telegram_request(string $method,array $payload): array {
@@ -192,11 +201,11 @@ function telegram_request(string $method,array $payload): array {
     $pause=1.05-(microtime(true)-$lastRequest);if($pause>0)usleep((int)($pause*1000000));$lastRequest=microtime(true);
     $curl=curl_init('https://api.telegram.org/bot'.$config['telegram_token'].'/'.$method);
     foreach($payload as $k=>$value)if(is_array($value))$payload[$k]=json_encode($value,JSON_UNESCAPED_UNICODE|JSON_THROW_ON_ERROR);
-    curl_setopt_array($curl,[CURLOPT_POST=>true,CURLOPT_POSTFIELDS=>$payload,CURLOPT_RETURNTRANSFER=>true,CURLOPT_CONNECTTIMEOUT=>10,CURLOPT_TIMEOUT=>(count(array_filter($payload,fn($v)=>$v instanceof CURLFile))?180:30),CURLOPT_PROTOCOLS=>CURLPROTO_HTTPS]);
-    $raw=curl_exec($curl);$status=(int)curl_getinfo($curl,CURLINFO_HTTP_CODE);$errno=curl_errno($curl);$seconds=(float)curl_getinfo($curl,CURLINFO_TOTAL_TIME);curl_close($curl);
-    if($raw===false || $status>=500 || !$status)throw new TelegramTransportFailure(telegram_transport_detail($method,$errno,$status,$seconds));
+    curl_setopt_array($curl,[CURLOPT_POST=>true,CURLOPT_POSTFIELDS=>$payload,CURLOPT_RETURNTRANSFER=>true,CURLOPT_CONNECTTIMEOUT=>20,CURLOPT_TIMEOUT=>(count(array_filter($payload,fn($v)=>$v instanceof CURLFile))?180:30),CURLOPT_PROTOCOLS=>CURLPROTO_HTTPS]);
+    $raw=curl_exec($curl);$status=(int)curl_getinfo($curl,CURLINFO_HTTP_CODE);$errno=curl_errno($curl);$seconds=(float)curl_getinfo($curl,CURLINFO_TOTAL_TIME);$timing=telegram_transport_timing($curl);curl_close($curl);
+    if($raw===false || $status>=500 || !$status)throw new TelegramTransportFailure(telegram_transport_detail($method,$errno,$status,$seconds,$timing));
     $response=json_decode($raw,true);
-    if(!is_array($response)||!isset($response['ok']))throw new TelegramTransportFailure(telegram_transport_detail($method,$errno,$status,$seconds));
+    if(!is_array($response)||!isset($response['ok']))throw new TelegramTransportFailure(telegram_transport_detail($method,$errno,$status,$seconds,$timing));
     return $response;
 }
 function telegram_state(int $id,string $channel,string $state,string $error=''): void {

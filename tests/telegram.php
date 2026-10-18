@@ -91,11 +91,19 @@ try{
     $calls=[];$reject=function($method,$payload)use(&$calls){$calls[]=$method;return ['ok'=>false,'error_code'=>400];};tg_fails(fn()=>telegram_send($legacy['id'],$reject),'rich API rejection stops conversion');tg_assert($calls===['sendRichMessage']&&$db->query("SELECT message_id FROM telegram_parts WHERE post_id=".$legacy['id']." AND kind='photo'")->fetchColumn()==901,'legacy photo is kept when replacement is rejected');
     $calls=[];telegram_send($legacy['id'],$mock);tg_assert(array_column($calls,0)===['sendRichMessage','deleteMessage'],'old photo replaced by one rich message after confirmed send');
     $connectionBefore=file_get_contents($dir.'/telegram-connection.php');tg_fails(fn()=>telegram_save_connection(['telegram_channel'=>'@denied_channel'],fn($method,$payload)=>$method==='getChatMember'?['ok'=>true,'result'=>['status'=>'member']]:$readOnly($method,$payload)),'missing admin rights rejected');tg_assert(file_get_contents($dir.'/telegram-connection.php')===$connectionBefore,'failed check preserves previous connection');
+    foreach([
+        [['dns'=>0.02,'tcp'=>0,'tls'=>0,'uploaded'=>0],'Этап: TCP'],
+        [['dns'=>0.02,'tcp'=>0.1,'tls'=>0,'uploaded'=>0],'Этап: TLS'],
+        [['dns'=>0.02,'tcp'=>0.1,'tls'=>0.3,'uploaded'=>1234],'Этап: ожидание HTTP-ответа']
+    ] as [$metrics,$expected])tg_assert(str_contains(telegram_transport_detail('sendRichMessage',28,0,10.0,$metrics),$expected),'timeout phase is explicit without a URL or token');
     $diag=tg_post('transport-detail','Не выводить текст рассказа в диагностике');
     telegram_schedule_post($diag['id'],date('Y-m-d\TH:i',time()+3600));$db->exec("UPDATE telegram_schedule SET due_at=0 WHERE state='scheduled'");$diagCalls=0;
     telegram_run_due(function()use(&$diagCalls,$config){$diagCalls++;throw new TelegramTransportFailure(telegram_transport_detail('sendRichMessage',28,0,30.0).' '.$config['telegram_token'].' https://api.telegram.org/bot'.$config['telegram_token'].'/sendRichMessage');});
     $error=$db->query('SELECT error FROM telegram_deliveries WHERE post_id='.$diag['id'])->fetchColumn();
     tg_assert(str_contains($error,'cURL 28')&&str_contains($error,'истекло время ожидания')&&!str_contains($error,$config['telegram_token'])&&!str_contains($error,'api.telegram.org'),'safe timeout reason retained without token or URL');
+    $q=$db->prepare('SELECT * FROM telegram_deliveries WHERE post_id=? AND channel=?');$q->execute([$diag['id'],$config['telegram_channel']]);ob_start();telegram_editor(post($diag['id']),$q->fetch());$unknownEditor=ob_get_clean();
+    $document=new DOMDocument();$previous=libxml_use_internal_errors(true);$document->loadHTML('<?xml encoding="UTF-8">'.$unknownEditor);libxml_clear_errors();libxml_use_internal_errors($previous);$xpath=new DOMXPath($document);
+    tg_assert($xpath->query('//select[@name="telegram_footer"]/option')->length===3,'footer remains one real dropdown with three options after a timeout');
     $scheduledError=$db->query('SELECT error FROM telegram_schedule WHERE post_id='.$diag['id'])->fetchColumn();
     tg_assert($scheduledError===$error,'scheduler records the same transport reason');
     telegram_run_due($mock);tg_assert($diagCalls===1 && $db->query('SELECT state FROM telegram_deliveries WHERE post_id='.$diag['id'])->fetchColumn()==='unknown','diagnostics do not make uncertain delivery retryable');
