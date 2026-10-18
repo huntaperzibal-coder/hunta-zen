@@ -24,7 +24,7 @@ function telegram_document(array $p): array {
             if($node instanceof DOMText){$text.=$node->nodeValue;return;}
             if(!$node instanceof DOMElement)return;
             $tag=strtolower($node->tagName);
-            if(in_array($tag,['img','script','style'],true))return;
+            if(in_array($tag,['img','video','script','style'],true))return;
             if($tag==='br'){$text.="\n";return;}
             if($tag==='hr'){$text.="\n\n";return;}
             if($tag==='li')$text.='• ';
@@ -92,15 +92,20 @@ function telegram_chunks(array $document,int $limit=3900): array {
     return $chunks;
 }
 /** Telegram Bot API Rich Messages: header, image and story in one message. */
-function telegram_rich_body(string $body): string {
+function telegram_rich_body(string $body, array &$videos=[]): string {
     global $config;
     $doc=new DOMDocument('1.0','UTF-8');$previous=libxml_use_internal_errors(true);
     try{$doc->loadHTML('<?xml encoding="UTF-8"><html><body>'.body_for_editor($body).'</body></html>',LIBXML_NONET|LIBXML_NOERROR|LIBXML_NOWARNING);}
     finally{libxml_clear_errors();libxml_use_internal_errors($previous);}
-    $walk=function(DOMNode $node)use(&$walk,$config):string{
+    $walk=function(DOMNode $node)use(&$walk,$config,&$videos):string{
         if($node instanceof DOMText)return h($node->nodeValue);
         if(!$node instanceof DOMElement)return '';
         $tag=strtolower($node->tagName);
+        if($tag==='video'){
+            $name=article_video_name($node->getAttribute('src'));if(!$name)return '';
+            if(!isset($videos[$name]))$videos[$name]='video'.count($videos);
+            return '<video src="tg://video?id='.$videos[$name].'"></video>';
+        }
         if(in_array($tag,['img','script','style'],true))return '';
         $content='';foreach($node->childNodes as $child)$content.=$walk($child);
         if($tag==='a'){
@@ -130,7 +135,9 @@ function telegram_plan(array $p): array {
     $html=$icon!==''?'<p>'.$icon.' <b>'.h(category_public_title($slug,'')).'</b> · <i>'.h(category_public_caption($slug,'')).'</i></p>':'';
     if($photo!=='')$html.='<img src="tg://photo?id=illustration">';
     $html.='<p><b>'.h($p['title']).'</b></p>';
-    $html.=trim((string)$p['telegram_text'])!==''?'<p>'.str_replace("\n",'<br>',h(trim($p['telegram_text']))).'</p>':telegram_rich_body($p['body']);
+    $videos=[];$story=telegram_rich_body($p['body'],$videos);
+    $html.=trim((string)$p['telegram_text'])!==''?'<p>'.str_replace("\n",'<br>',h(trim($p['telegram_text']))).'</p>':$story;
+    if(trim((string)$p['telegram_text'])!=='')foreach($videos as $name=>$key)$html.='<video src="tg://video?id='.$key.'"></video>';
     $url=rtrim($config['site_url'],'/').'/?p='.rawurlencode($p['slug']);$html.='<blockquote><p><b>Гена и Винни</b></p><p><a href="'.h($url).'">🌐 Читать на сайте</a></p></blockquote>';
     // Reject oversized messages before any network call; never truncate or split implicitly.
     if(mb_strlen(html_entity_decode(strip_tags($html),ENT_QUOTES|ENT_HTML5,'UTF-8'))>32768)throw new RuntimeException('Рассказ больше лимита одного составного сообщения Telegram (32768 символов). Сократи текст для канала.');
@@ -140,14 +147,20 @@ function telegram_plan(array $p): array {
     $blocks=0;$check=function(DOMNode $node,int $depth=0)use(&$check,&$blocks):void{
         if(!$node instanceof DOMElement)return;
         if($depth>16)throw new RuntimeException('Слишком много вложенных уровней форматирования для Telegram.');
-        if(in_array(strtolower($node->tagName),['p','h2','h3','h4','pre','blockquote','ul','ol','li','table','tr','img','hr'],true))$blocks++;
+        if(in_array(strtolower($node->tagName),['p','h2','h3','h4','pre','blockquote','ul','ol','li','table','tr','img','video','hr'],true))$blocks++;
         foreach($node->childNodes as $child)$check($child,$depth+1);
     };
     foreach($doc->getElementsByTagName('body')->item(0)->childNodes as $node)$check($node);
     if($blocks>500)throw new RuntimeException('Слишком много абзацев и блоков для одного сообщения Telegram (лимит 500).');
     $rich=['html'=>$html];
     if($photo!=='')$rich['media']=[['id'=>'illustration','media'=>['type'=>'photo','media'=>'attach://picture']]];
-    return [['kind'=>'text','ordinal'=>0,'rich_message'=>$rich,'photo'=>$photo]];
+    if(count($videos)+($photo!==''?1:0)>50)throw new RuntimeException('В одном сообщении Telegram может быть не больше 50 вложений.');
+    foreach($videos as $name=>$key){
+        $file=$storage.'/photos/'.$name;
+        if(!is_file($file)||filesize($file)>VIDEO_MAX_BYTES)throw new RuntimeException('Видео недоступно или больше 45 МБ. Проверь его перед отправкой.');
+        $rich['media'][]=['id'=>$key,'media'=>['type'=>'video','media'=>'attach://'.$key]];
+    }
+    return [['kind'=>'text','ordinal'=>0,'rich_message'=>$rich,'photo'=>$photo,'videos'=>$videos]];
 }
 /** Only fixed transport metadata is exposed; never a request URL or raw response. */
 class TelegramTransportFailure extends RuntimeException {}
@@ -171,7 +184,7 @@ function telegram_request(string $method,array $payload): array {
     $pause=1.05-(microtime(true)-$lastRequest);if($pause>0)usleep((int)($pause*1000000));$lastRequest=microtime(true);
     $curl=curl_init('https://api.telegram.org/bot'.$config['telegram_token'].'/'.$method);
     foreach($payload as $k=>$value)if(is_array($value))$payload[$k]=json_encode($value,JSON_UNESCAPED_UNICODE|JSON_THROW_ON_ERROR);
-    curl_setopt_array($curl,[CURLOPT_POST=>true,CURLOPT_POSTFIELDS=>$payload,CURLOPT_RETURNTRANSFER=>true,CURLOPT_CONNECTTIMEOUT=>10,CURLOPT_TIMEOUT=>30,CURLOPT_PROTOCOLS=>CURLPROTO_HTTPS]);
+    curl_setopt_array($curl,[CURLOPT_POST=>true,CURLOPT_POSTFIELDS=>$payload,CURLOPT_RETURNTRANSFER=>true,CURLOPT_CONNECTTIMEOUT=>10,CURLOPT_TIMEOUT=>(count(array_filter($payload,fn($v)=>$v instanceof CURLFile))?180:30),CURLOPT_PROTOCOLS=>CURLPROTO_HTTPS]);
     $raw=curl_exec($curl);$status=(int)curl_getinfo($curl,CURLINFO_HTTP_CODE);$errno=curl_errno($curl);$seconds=(float)curl_getinfo($curl,CURLINFO_TOTAL_TIME);curl_close($curl);
     if($raw===false || $status>=500 || !$status)throw new TelegramTransportFailure(telegram_transport_detail($method,$errno,$status,$seconds));
     $response=json_decode($raw,true);
@@ -210,6 +223,7 @@ function telegram_send(int $id,?callable $transport=null,?array $snapshot=null):
                 $payload['rich_message']=$part['rich_message'];
                 if($message)$payload['message_id']=(int)$message;
                 if($part['photo']!=='')$payload['picture']=new CURLFile($storage.'/photos/'.$part['photo'],mime_content_type($storage.'/photos/'.$part['photo']),'illustration.'.pathinfo($part['photo'],PATHINFO_EXTENSION));
+                foreach($part['videos']??[] as $name=>$key)$payload[$key]=new CURLFile($storage.'/photos/'.$name,'video/mp4',$key.'.mp4');
             }
             $db->prepare("INSERT INTO telegram_parts(post_id,channel,kind,ordinal,message_id,state,operation) VALUES(?,?,?,?,?,'sending',?) ON CONFLICT(post_id,channel,kind,ordinal) DO UPDATE SET state='sending',operation=excluded.operation")->execute([$id,$channel,$part['kind'],$part['ordinal'],$message,$delete?'delete':'upsert']);
             try{$response=$transport?$transport($method,$payload):telegram_request($method,$payload);if(!is_array($response)||!isset($response['ok']))throw new RuntimeException('Invalid response');}

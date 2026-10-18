@@ -17,3 +17,6 @@
 :is(.blog .prose,.orda-blog-content .prose,body.mce-content-body) :is(td,th){border:1px solid var(--line,#dcded8);padding:5px 8px;vertical-align:top}
 :is(.blog .prose,.orda-blog-content .prose,body.mce-content-body) pre{white-space:pre-wrap;font:13px/1.43 ui-monospace,monospace;background:var(--soft,#efeee8);color:inherit;padding:10px;border-radius:4px}
 :is(.blog .prose,.orda-blog-content .prose,body.mce-content-body) hr{border:0;border-top:1px solid var(--line,#dcded8);margin:1em 0}
+
+/* Native video player, shared layout without autoplay or cropping. */
+video{display:block;width:100%;max-width:100%;height:auto;max-height:75vh;margin:1em auto;border-radius:12px;background:#16191c;object-fit:contain}

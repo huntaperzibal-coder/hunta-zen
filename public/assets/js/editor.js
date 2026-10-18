@@ -22,24 +22,25 @@
     }
     if (/src=["'](?:blob:|data:)/i.test(form.elements.body.value)) throw Error('Фото ещё загружается. Подожди перед сохранением.');
   }
-  function uploadFile(file, progress = () => {}) {
+  function uploadFile(file, progress = () => {}, kind = 'photo') {
     const task = new Promise((resolve, reject) => {
       const data = new FormData();
       data.append('csrf', form.elements.csrf.value);
       data.append('id', form.elements.id.value);
+      data.append('kind', kind);
       data.append('file', file, file.name || 'photo.png');
       const xhr = new XMLHttpRequest();
       xhr.open('POST', '/editor-upload.php');
-      xhr.timeout = 60000;
+      xhr.timeout = kind === 'video' ? 180000 : 60000;
       xhr.upload.onprogress = e => { if (e.lengthComputable) progress(e.loaded / e.total * 100); };
       xhr.onload = () => {
         let result;
         try { result = JSON.parse(xhr.responseText); }
-        catch { reject('Сервер не принял фото. Проверь размер файла или войди заново.'); return; }
-        if (xhr.status < 200 || xhr.status >= 300 || !result.location) { reject(result.error || 'Не удалось загрузить фото.'); return; }
+        catch { reject('Сервер не принял файл. Проверь размер файла или войди заново.'); return; }
+        if (xhr.status < 200 || xhr.status >= 300 || !result.location) { reject(result.error || 'Не удалось загрузить файл.'); return; }
         resolve(result.location);
       };
-      xhr.onerror = () => reject('Нет связи. Фотография не загрузилась.');
+      xhr.onerror = () => reject('Нет связи. Файл не загрузился.');
       xhr.ontimeout = () => reject('Загрузка заняла слишком долго. Попробуй снова.');
       xhr.send(data);
     });
@@ -53,12 +54,13 @@
       language: 'ru', language_url: '/assets/tinymce/langs/ru.js',
       plugins: 'autoresize lists advlist autolink link image fullscreen searchreplace wordcount code table charmap',
       menubar: false, promotion: false, branding: false,
-      toolbar: 'undo redo | daocopyall daopasteall | blocks daolinebreak | bold italic underline strikethrough | bullist numlist blockquote | link daophoto image table | alignleft aligncenter alignright | removeformat daomarks | searchreplace fullscreen | daosave',
+      toolbar: 'undo redo | daocopyall daopasteall | blocks daolinebreak | bold italic underline strikethrough | bullist numlist blockquote | link daophoto daovideo image table | alignleft aligncenter alignright | removeformat daomarks | searchreplace fullscreen | daosave',
       toolbar_mode: 'sliding', block_formats: 'Абзац=p; Подзаголовок=h2; Малый заголовок=h3',
       height: 760, min_height: window.innerWidth <= 700 ? 480 : 760, max_height: 6000,
       autoresize_bottom_margin: 24, autoresize_overflow_padding: 22, resize: true, elementpath: false,
-      content_css: ['/assets/css/article-editor.css?v=6', '/assets/css/reading-type.css?v=1'],
+      content_css: ['/assets/css/article-editor.css?v=7', '/assets/css/reading-type.css?v=2'],
       convert_urls: false, relative_urls: false, remove_script_host: true,
+      extended_valid_elements: 'video[src|controls|playsinline|preload]',
       paste_data_images: true, automatic_uploads: true,
       images_file_types: 'jpg,jpeg,png,webp', images_reuse_filename: false,
       images_upload_handler: (blob, progress) => uploadFile(blob.blob(), progress),
@@ -76,6 +78,26 @@
       },
       setup: ed => {
         let ready = false;
+        ed.ui.registry.addButton('daovideo', {
+          text: 'Видео', tooltip: 'Вставить MP4 в текст (H.264 / AAC)',
+          onAction: () => {
+            const picker = document.createElement('input');picker.type = 'file';picker.accept = 'video/mp4,.mp4';
+            const bookmark = ed.selection.getBookmark();
+            picker.onchange = async () => {
+              const file = picker.files[0];if (!file) return;
+              const limit = Number(form.dataset.videoLimit);
+              if (file.size > limit) { ed.windowManager.alert(`Видео слишком большое. Лимит: ${(limit / 1048576).toFixed(1)} МБ.`);return; }
+              status.textContent = 'Загружаю видео…';
+              try {
+                const url = await uploadFile(file, percent => { status.textContent = `Загружаю видео: ${Math.round(percent)}%`; }, 'video');
+                ed.focus();ed.selection.moveToBookmark(bookmark);
+                ed.undoManager.transact(() => ed.insertContent('<figure><video src="' + ed.dom.encode(url) + '" controls playsinline preload="metadata"></video></figure><p></p>'));
+                syncBody();markDirty();
+              } catch (message) { status.textContent = 'Видео не загружено';ed.windowManager.alert(String(message)); }
+            };
+            picker.click();
+          }
+        });
         const refreshMarks = () => {
           const body = ed.getBody();
           if (!body) return;

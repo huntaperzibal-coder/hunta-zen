@@ -26,6 +26,7 @@ $db = new PDO('sqlite:' . $storage . '/blog.sqlite', null, null, [PDO::ATTR_ERRM
 $db->exec('PRAGMA foreign_keys=ON; PRAGMA busy_timeout=5000;');
 require_once __DIR__ . '/functions.php';
 require_once __DIR__ . '/rich_text.php';
+require_once __DIR__ . '/video.php';
 require_once __DIR__ . '/categories.php';
 require_once __DIR__ . '/orda_auth.php';
 require_once __DIR__ . '/dao_brand.php';

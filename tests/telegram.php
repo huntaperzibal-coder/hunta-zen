@@ -26,6 +26,18 @@ try{
     $db->prepare('UPDATE posts SET body=? WHERE id=?')->execute([str_repeat('Мысль ',1100),$p['id']]);$calls=[];telegram_send($p['id'],$mock);tg_assert($calls[0][0]==='editMessageText' && count($calls)===1 && str_contains($calls[0][1]['rich_message']['html'],str_repeat('Мысль ',1100)),'long story and image stay in one message');
     $db->prepare("INSERT INTO telegram_parts(post_id,channel,kind,ordinal,message_id,state) VALUES(?,?,'photo',0,801,'sent'),(?,?,'text',1,802,'sent')")->execute([$p['id'],$config['telegram_channel'],$p['id'],$config['telegram_channel']]);
     $db->prepare('UPDATE posts SET body=? WHERE id=?')->execute(['Коротко',$p['id']]);$calls=[];telegram_send($p['id'],$mock);tg_assert(in_array('deleteMessage',array_column($calls,0),true),'legacy extra photo and text messages removed only after rich edit succeeds');
+
+    $video=str_repeat('b',32).'.mp4';file_put_contents($dir.'/photos/'.$video,'test-only-mp4');
+    $vp=tg_post('video',DAO_RICH_PREFIX.'<p>До</p><video src="'.photo_url($video).'" controls></video><p>После</p>');
+    $calls=[];telegram_send($vp['id'],$mock);
+    tg_assert(count($calls)===1&&$calls[0][0]==='sendRichMessage'&&$calls[0][1]['video0'] instanceof CURLFile,'video and text uploaded as one rich message');
+    $vhtml=$calls[0][1]['rich_message']['html'];tg_assert(strpos($vhtml,'До')<strpos($vhtml,'tg://video?id=video0')&&strpos($vhtml,'tg://video?id=video0')<strpos($vhtml,'После'),'video keeps position between paragraphs');
+    tg_assert($calls[0][1]['rich_message']['media'][0]['media']['type']==='video','Telegram attachment type is video');
+    telegram_schedule_post($vp['id'],date('Y-m-d\TH:i',time()+3600));
+    $db->prepare('UPDATE posts SET body=? WHERE id=?')->execute(['Изменено',$vp['id']]);$db->exec("UPDATE telegram_schedule SET due_at=0 WHERE state='scheduled'");$calls=[];
+    telegram_run_due($mock);tg_assert(count($calls)===1&&isset($calls[0][1]['video0']),'scheduled snapshot retains video after text edits');
+    $override=$vp;$override['telegram_text']='Текст для канала';tg_assert(isset(telegram_plan($override)[0]['videos'][$video]),'Telegram text override retains video');
+    unlink($dir.'/photos/'.$video);tg_fails(fn()=>telegram_plan($vp),'missing video rejected before sending');
     $p2=tg_post('unknown',str_repeat('я',6000));
     tg_fails(fn()=>telegram_send($p2['id'],fn()=>throw new RuntimeException('timeout')),'rich request timeout stops safely');
     tg_fails(fn()=>telegram_send($p2['id'],$mock),'unknown rich result blocks duplicate retry');telegram_resolve($p2['id'],502);$calls=[];telegram_send($p2['id'],$mock);tg_assert(array_column($calls,0)===['editMessageText'],'manual reconciliation edits known rich message');

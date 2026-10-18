@@ -7,6 +7,13 @@ require dirname(__DIR__).'/app/bootstrap.php';$db->exec(file_get_contents(ROOT.'
 function expect(bool $ok,string $message):void{if(!$ok)throw new RuntimeException($message);echo 'OK: '.$message."\n";}
 try {
     $name=str_repeat('a',32).'.jpg';
+    $video='/media.php?file='.str_repeat('b',32).'.mp4';
+    $cleanVideo=sanitize_article_html('<video src="'.$video.'" autoplay loop onplay="bad()" poster="https://bad.test/x"><source src="https://bad.test/a.mp4"></video>');
+    expect($cleanVideo==='<video src="'.$video.'" controls playsinline preload="metadata"></video>','video retained with safe native controls only');
+    expect(sanitize_article_html($cleanVideo)===$cleanVideo,'video sanitizer round trip');
+    expect(sanitize_article_html('<video src="https://bad.test/x.mp4"></video><video src="javascript:bad()"></video>')==='','remote and executable video URLs removed');
+    expect(media_byte_range('bytes=2-6',10)===[2,6]&&media_byte_range('bytes=-3',10)===[7,9]&&media_byte_range('bytes=10-',10)===false,'bounded byte range parser');
+
     $html='<h2>Заголовок</h2><p style="text-align: center; color:red">Текст <strong>жирный</strong> <em>курсив</em> <a href="https://example.org/a" target="_blank">ссылка</a></p><ul><li>Первый</li><li>Второй</li></ul><blockquote>Цитата</blockquote><figure><img src="/media.php?file='.$name.'" alt="Горы"><figcaption>Подпись</figcaption></figure><table><tbody><tr><td colspan="2">Ячейка</td></tr></tbody></table>';
     $clean=sanitize_article_html($html);
     expect(str_contains($clean,'<h2>Заголовок</h2>') && str_contains($clean,'<strong>жирный</strong>') && str_contains($clean,'<blockquote>'),'formatting preserved');

@@ -53,7 +53,7 @@ with tempfile.TemporaryDirectory(prefix='hunta-http-') as tmp:
             anonymous=urllib.request.build_opener()
             assert 'Очень личный черновик' not in request('/',opener=anonymous)[1],'draft hidden'
             assert request('/?p=istoriya-script-x-script',opener=anonymous)[0]==404
-            assert '/assets/js/editor-clipboard.js?v=1' in html and '/assets/js/editor.js?v=14' in html,'clipboard helper loads before editor'
+            assert '/assets/js/editor-clipboard.js?v=1' in html and '/assets/js/editor.js?v=15' in html,'clipboard helper loads before editor'
             assert html.index('/assets/js/editor-clipboard.js') < html.index('/assets/js/editor.js'),'clipboard script order'
             assert request('/proofread.php')[0]==404,'retired proofreading endpoint is unavailable'
             # Cover upload also saves the article; private photo must stay private.
@@ -173,8 +173,37 @@ with tempfile.TemporaryDirectory(prefix='hunta-http-') as tmp:
             assert request('/admin.php',{'action':'feedback_read','message_id':message_id})[0]==403,'read marker requires CSRF'
             code,inbox,_=request('/admin.php',{'action':'feedback_read','message_id':message_id,'csrf':csrf});assert code==200 and 'Прочитано · ' in inbox
             assert 'Личное сообщение' not in request('/',opener=guest)[1],'messages never appear in public feed'
+            # A real tiny H.264 MP4: authenticated multipart upload, private draft, byte seeking.
+            mp4=base64.b64decode('AAAAIGZ0eXBpc29tAAACAGlzb21pc28yYXZjMW1wNDEAAAOTbW9vdgAAAGxtdmhkAAAAAAAAAAAAAAAAAAAD6AAAAUAAAQAAAQAAAAAAAAAAAAAAAAEAAAAAAAAAAAAAAAAAAAABAAAAAAAAAAAAAAAAAABAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAgAAAr10cmFrAAAAXHRraGQAAAADAAAAAAAAAAAAAAABAAAAAAAAAUAAAAAAAAAAAAAAAAAAAAAAAAEAAAAAAAAAAAAAAAAAAAABAAAAAAAAAAAAAAAAAABAAAAAAKAAAABaAAAAAAAkZWR0cwAAABxlbHN0AAAAAAAAAAEAAAFAAAAEAAABAAAAAAI1bWRpYQAAACBtZGhkAAAAAAAAAAAAAAAAAAAyAAAAEABVxAAAAAAALWhkbHIAAAAAAAAAAHZpZGUAAAAAAAAAAAAAAABWaWRlb0hhbmRsZXIAAAAB4G1pbmYAAAAUdm1oZAAAAAEAAAAAAAAAAAAAACRkaW5mAAAAHGRyZWYAAAAAAAAAAQAAAAx1cmwgAAAAAQAAAaBzdGJsAAAAwHN0c2QAAAAAAAAAAQAAALBhdmMxAAAAAAAAAAEAAAAAAAAAAAAAAAAAAAAAAKAAWgBIAAAASAAAAAAAAAABFUxhdmM2MC4zMS4xMDIgbGlieDI2NAAAAAAAAAAAAAAAGP//AAAANmF2Y0MBZAAL/+EAGWdkAAus2UKN+TARAAADAAEAAAMAMg8UKZYBAAZo6+PLIsD9+PgAAAAAEHBhc3AAAAABAAAAAQAAABRidHJ0AAAAAAAAUoUAAFKFAAAAGHN0dHMAAAAAAAAAAQAAAAgAAAIAAAAAFHN0c3MAAAAAAAAAAQAAAAEAAABIY3R0cwAAAAAAAAAHAAAAAQAABAAAAAABAAAKAAAAAAEAAAQAAAAAAQAAAAAAAAABAAACAAAAAAEAAAgAAAAAAgAAAgAAAAAcc3RzYwAAAAAAAAABAAAAAQAAAAgAAAABAAAANHN0c3oAAAAAAAAAAAAAAAgAAALqAAAADwAAAA0AAAAMAAAADAAAABUAAAAOAAAADAAAABRzdGNvAAAAAAAAAAEAAAPDAAAAYnVkdGEAAABabWV0YQAAAAAAAAAhaGRscgAAAAAAAAAAbWRpcmFwcGwAAAAAAAAAAAAAAAAtaWxzdAAAACWpdG9vAAAAHWRhdGEAAAABAAAAAExhdmY2MC4xNi4xMDAAAAAIZnJlZQAAA1VtZGF0AAACrgYF//+q3EXpvebZSLeWLNgg2SPu73gyNjQgLSBjb3JlIDE2NCByMzEwOCAzMWUxOWY5IC0gSC4yNjQvTVBFRy00IEFWQyBjb2RlYyAtIENvcHlsZWZ0IDIwMDMtMjAyMyAtIGh0dHA6Ly93d3cudmlkZW9sYW4ub3JnL3gyNjQuaHRtbCAtIG9wdGlvbnM6IGNhYmFjPTEgcmVmPTMgZGVibG9jaz0xOjA6MCBhbmFseXNlPTB4MzoweDExMyBtZT1oZXggc3VibWU9NyBwc3k9MSBwc3lfcmQ9MS4wMDowLjAwIG1peGVkX3JlZj0xIG1lX3JhbmdlPTE2IGNocm9tYV9tZT0xIHRyZWxsaXM9MSA4eDhkY3Q9MSBjcW09MCBkZWFkem9uZT0yMSwxMSBmYXN0X3Bza2lwPTEgY2hyb21hX3FwX29mZnNldD0tMiB0aHJlYWRzPTMgbG9va2FoZWFkX3RocmVhZHM9MSBzbGljZWRfdGhyZWFkcz0wIG5yPTAgZGVjaW1hdGU9MSBpbnRlcmxhY2VkPTAgYmx1cmF5X2NvbXBhdD0wIGNvbnN0cmFpbmVkX2ludHJhPTAgYmZyYW1lcz0zIGJfcHlyYW1pZD0yIGJfYWRhcHQ9MSBiX2JpYXM9MCBkaXJlY3Q9MSB3ZWlnaHRiPTEgb3Blbl9nb3A9MCB3ZWlnaHRwPTIga2V5aW50PTI1MCBrZXlpbnRfbWluPTI1IHNjZW5lY3V0PTQwIGludHJhX3JlZnJlc2g9MCByY19sb29rYWhlYWQ9NDAgcmM9Y3JmIG1idHJlZT0xIGNyZj0yMy4wIHFjb21wPTAuNjAgcXBtaW49MCBxcG1heD02OSBxcHN0ZXA9NCBpcF9yYXRpbz0xLjQwIGFxPTE6MS4wMACAAAAANGWIhAA3//7hA/gU103+Y49D2QFoVcuRtxKXTNnzkBiPtG+PmsU+jl1zKtmuAKcABBQW9hEAAAALQZokbEM//p4QBswAAAAJQZ5CeIX/APOBAAAACAGeYXRCvwFTAAAACAGeY2pCvwFTAAAAEUGaZ0moQWiZTAhX//44QBoxAAAACkGehUURLCv/AVMAAAAIAZ6makK/AVM=')
+            def upload_video(content, token=csrf, opener=client):
+                fields={'csrf':token,'id':pid,'kind':'video'}
+                parts=[f'--{boundary}\r\nContent-Disposition: form-data; name="{key}"\r\n\r\n{value}\r\n'.encode() for key,value in fields.items()]
+                parts.append(f'--{boundary}\r\nContent-Disposition: form-data; name="file"; filename="clip.mp4"\r\nContent-Type: video/mp4\r\n\r\n'.encode()+content+b'\r\n')
+                parts.append(f'--{boundary}--\r\n'.encode())
+                return request('/editor-upload.php',b''.join(parts),opener=opener,headers={'Content-Type':f'multipart/form-data; boundary={boundary}'})
+            assert upload_video(mp4,opener=anonymous)[0]==401,'video upload needs login'
+            assert upload_video(mp4,token='bad')[0]==403,'video upload needs CSRF'
+            assert upload_video(b'<?php echo "bad";')[0]==422,'fake MP4 rejected by content type'
+            code,result,_=upload_video(mp4);assert code==200,result
+            video_url=json.loads(result)['location'];video=urllib.parse.parse_qs(urllib.parse.urlparse(video_url).query)['file'][0]
+            assert (storage/'photos'/video).read_bytes()==mp4,'video saved intact'
+            assert request(video_url,opener=anonymous)[0]==404,'unattached video private'
+            with sqlite3.connect(storage/'blog.sqlite') as check:
+                check.execute("INSERT INTO posts(slug,title,body,status,created_at,updated_at) VALUES(?,?,?,'draft',1,1)",('video-test','Видео','<!--dao:rich-v1--><p>До</p><video src="'+video_url+'" controls></video><p>После</p>'))
+            assert request(video_url,opener=anonymous)[0]==404,'draft video private'
+            assert request(video_url)[0]==200,'author can view draft video'
+            with sqlite3.connect(storage/'blog.sqlite') as check:check.execute("UPDATE posts SET status='published',published_at='2026-10-18T10:00:00+07:00' WHERE slug='video-test'")
+            assert '<video src="'+video_url+'" controls playsinline preload="metadata"></video>' in request('/?p=video-test',opener=anonymous)[1],'public post has native player'
+            for value,start,end in [('bytes=4-15',4,15),('bytes=16-',16,len(mp4)-1),('bytes=-12',len(mp4)-12,len(mp4)-1)]:
+                with anonymous.open(urllib.request.Request(base+video_url,headers={'Range':value})) as res:
+                    assert res.status==206 and res.headers['Content-Range']==f'bytes {start}-{end}/{len(mp4)}'
+                    assert res.read()==mp4[start:end+1],'video seek bytes match'
+            assert request(video_url,opener=anonymous,headers={'Range':'bytes=999999-'})[0]==416,'invalid range rejected'
+            with anonymous.open(urllib.request.Request(base+video_url,method='HEAD')) as res:
+                assert res.headers['Content-Type']=='video/mp4' and int(res.headers['Content-Length'])==len(mp4) and res.read()==b'','video HEAD'
             subprocess.run([PHP,str(ROOT/'tools/backup.php')],env=env,check=True,capture_output=True)
             copies=list((storage/'backups').iterdir());assert len(copies)==1 and (copies[0]/'photos'/photo).exists(),'backup photos'
+            assert (copies[0]/'photos'/video).read_bytes()==mp4,'verified backup includes video'
             print('OK: HTTP login, CSRF, drafts, upload, private media, publishing, XSS, conflicts, backup')
         finally:
             server.terminate();server.wait(timeout=5)

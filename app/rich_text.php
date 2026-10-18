@@ -23,7 +23,7 @@ function sanitize_article_html(string $html): string {
     $previous=libxml_use_internal_errors(true);
     try { $document->loadHTML('<?xml encoding="UTF-8"><!doctype html><html><body>'.$html.'</body></html>',LIBXML_NONET|LIBXML_NOERROR|LIBXML_NOWARNING); }
     finally { libxml_clear_errors();libxml_use_internal_errors($previous); }
-    $allowed=['p','h2','h3','h4','strong','b','em','i','u','s','blockquote','ul','ol','li','a','br','hr','figure','figcaption','img','table','thead','tbody','tfoot','tr','td','th','pre','code','sub','sup'];
+    $allowed=['p','h2','h3','h4','strong','b','em','i','u','s','blockquote','ul','ol','li','a','br','hr','figure','figcaption','img','video','table','thead','tbody','tfoot','tr','td','th','pre','code','sub','sup'];
     $drop=['script','style','iframe','object','embed','svg','math','template','noscript','form','input','button','select','textarea','meta','link','base'];
     $walk=function(DOMNode $node)use(&$walk,$allowed,$drop):string {
         if ($node instanceof DOMText) return h($node->nodeValue);
@@ -38,6 +38,10 @@ function sanitize_article_html(string $html): string {
             $attrs=' href="'.h($url).'"';
             if ($node->getAttribute('target')==='_blank')$attrs.=' target="_blank" rel="noopener noreferrer"';
             if ($node->hasAttribute('title'))$attrs.=' title="'.h($node->getAttribute('title')).'"';
+        }
+        if ($tag==='video') {
+            $name=article_video_name($node->getAttribute('src'));if(!$name)return '';
+            return '<video src="'.h(photo_url($name)).'" controls playsinline preload="metadata"></video>';
         }
         if ($tag==='img') {
             $name=article_photo_name($node->getAttribute('src'));if (!$name)return '';
