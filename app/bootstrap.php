@@ -13,7 +13,12 @@ $config = require $configPath;
 require_once __DIR__.'/seo.php';
 seo_redirect();
 $storage = $config['storage'];
-if(is_file($storage.'/telegram-connection.php'))$config=array_replace($config,require $storage.'/telegram-connection.php');
+$telegramConnectionPath=$storage.'/telegram-connection.php';
+if(is_file($telegramConnectionPath)){
+    // This mutable private data file must not retain old channel settings in OPcache.
+    if(function_exists('opcache_invalidate'))opcache_invalidate($telegramConnectionPath,true);
+    $config=array_replace($config,require $telegramConnectionPath);
+}
 $config['telegram_default_channel']=(string)($config['telegram_channel']??'');
 if (PHP_SAPI !== 'cli') {
     ini_set('display_errors','0');

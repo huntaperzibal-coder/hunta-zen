@@ -31,6 +31,7 @@ function telegram_store_channel(array $connection,bool $makeDefault=false): void
         $file=tempnam($storage,'tg-');if(!$file)throw new RuntimeException('Не удалось сохранить каналы.');
         chmod($file,0600);
         if(file_put_contents($file,'<?php return '.var_export($data,true).';',LOCK_EX)===false||!rename($file,$storage.'/telegram-connection.php')){@unlink($file);throw new RuntimeException('Не удалось сохранить каналы.');}
+        if(function_exists('opcache_invalidate'))opcache_invalidate($storage.'/telegram-connection.php',true);
         $config=array_replace($config,$data);$config['telegram_default_channel']=(string)$default['telegram_channel'];
     }finally{flock($lock,LOCK_UN);fclose($lock);}
 }

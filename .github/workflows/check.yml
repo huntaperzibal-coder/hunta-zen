@@ -12,6 +12,7 @@ jobs:
         with:
           php-version: ${{ matrix.php }}
           extensions: pdo_sqlite, mbstring, curl, fileinfo, dom
+          ini-values: opcache.enable_cli=1
       - run: find app public tools tests -name '*.php' -exec php -l {} \;
       - run: php tests/reader_feedback.php
       - run: php tests/database_backup.php
@@ -45,3 +46,6 @@ jobs:
       - run: node tests/editor_confirm.cjs
       - run: node --check public/assets/js/illustrator.js
       - run: node --check public/assets/js/editor-help.js
+      - run: node --check public/assets/js/reader-actions.js
+      - run: node --check public/assets/js/reader-feed.js
+      - run: node --check public/assets/js/reader-theme.js
