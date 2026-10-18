@@ -5,7 +5,8 @@ $name=(string)($_GET['file']??'');
 if (!preg_match('/^[a-f0-9]{32}\.(jpg|png|webp|mp4)$/D',$name,$m)) { http_response_code(404); exit; }
 // Не публикуем фото из черновиков по известному URL.
 $q=$db->prepare("SELECT 1 FROM posts WHERE status='published' AND (cover=? OR instr(body,?)>0 OR instr(body,?)>0) LIMIT 1"); $q->execute([$name,']('.$name.')','file='.$name]);
-if (!$q->fetchColumn() && !authenticated()) { http_response_code(404);exit; }
+$profile=in_array($name,array_filter([reader_public_photo('author_photo'),reader_public_photo('support_qr')]),true);
+if (!$q->fetchColumn() && !$profile && !authenticated()) { http_response_code(404);exit; }
 $file=$storage.'/photos/'.$name; if (!is_file($file)) { http_response_code(404); exit; }
 header('Content-Type: '.['jpg'=>'image/jpeg','png'=>'image/png','webp'=>'image/webp','mp4'=>'video/mp4'][$m[1]]);
 header('X-Content-Type-Options: nosniff');header('Cache-Control: private, no-store');

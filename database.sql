@@ -78,3 +78,13 @@ CREATE TABLE IF NOT EXISTS reader_feedback (
 );
 CREATE INDEX IF NOT EXISTS reader_feedback_rate ON reader_feedback(client_key,created_at);
 INSERT OR IGNORE INTO schema_versions VALUES(7,datetime('now'));
+
+CREATE TABLE IF NOT EXISTS reader_feedback_consents (
+ feedback_id INTEGER PRIMARY KEY REFERENCES reader_feedback(id) ON DELETE CASCADE,
+ version TEXT NOT NULL, accepted_at INTEGER NOT NULL, document_hash TEXT NOT NULL, document TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS reader_feedback_attempts (
+ client_key TEXT NOT NULL, bucket INTEGER NOT NULL, attempts INTEGER NOT NULL DEFAULT 0,
+ PRIMARY KEY(client_key,bucket)
+);
+INSERT OR IGNORE INTO schema_versions VALUES(8,datetime('now'));

@@ -7,10 +7,10 @@ declare(strict_types=1);
 function orda_page_start(string $title): void {
     global $ordaPageMode;
     $login=!authenticated();$ordaPageMode=$login?'auth':'shell';
-    echo '<!doctype html><html lang="ru"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex,nofollow"><title>'.h($title).'</title>'.dao_brand_head(true).'<link rel="stylesheet" href="/styles_core/adminka/stili_orda.css?v=1"><link rel="stylesheet" href="/assets/css/orda_blog.css?v=12"><link rel="stylesheet" href="/assets/css/reading-type.css?v=2"></head><body class="'.($login?'auth':'orda-shell').'">';
+    echo '<!doctype html><html lang="ru"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex,nofollow"><title>'.h($title).'</title>'.dao_brand_head(true).'<link rel="stylesheet" href="/styles_core/adminka/stili_orda.css?v=1"><link rel="stylesheet" href="/assets/css/orda_blog.css?v=13"><link rel="stylesheet" href="/assets/css/reading-type.css?v=2"></head><body class="'.($login?'auth':'orda-shell').'">';
     if ($login) { echo '<div class="auth-box">';return; }
     $view=(string)($_GET['view']??'list');$status=(string)($_GET['status']??'');
-    $current=match($view){'edit','preview'=>'list','illustrator'=>'illustrator','github'=>'github','settings'=>'settings','service'=>'service','telegram'=>'telegram',default=>$status ?: 'list'};
+    $current=match($view){'edit','preview'=>'list','illustrator'=>'illustrator','author'=>'author','github'=>'github','settings'=>'settings','service'=>'service','telegram'=>'telegram',default=>$status ?: 'list'};
     $items=[
         ['id'=>'list','title'=>'Все записи','file'=>'/admin.php','icon'=>'stories'],
         ['id'=>'draft','title'=>'Черновики и заметки','file'=>'/admin.php?status=draft','icon'=>'draft'],
@@ -18,7 +18,8 @@ function orda_page_start(string $title): void {
         ['id'=>'telegram','title'=>'Telegram','file'=>'/admin.php?view=telegram','icon'=>'telegram'],
         ['id'=>'illustrator','title'=>'Иллюстратор','file'=>'/admin.php?view=illustrator','icon'=>'draft'],
         ['id'=>'feedback','title'=>'Обратная связь','file'=>'/admin.php?view=feedback','icon'=>'mail'],
-        ['id'=>'settings','title'=>'Настройки сайта','file'=>'/admin.php?view=settings','icon'=>'settings','divider'=>'САЙТ'],
+        ['id'=>'author','title'=>'Автор и форма','file'=>'/admin.php?view=author','icon'=>'stories','divider'=>'САЙТ'],
+        ['id'=>'settings','title'=>'Настройки сайта','file'=>'/admin.php?view=settings','icon'=>'settings'],
         ['id'=>'github','title'=>'GitHub','file'=>'/admin.php?view=github','icon'=>'backup','divider'=>'ОБСЛУЖИВАНИЕ'],
         ['id'=>'service','title'=>'Резервные копии и журнал','file'=>'/admin.php?view=service','icon'=>'backup'],
     ];
@@ -27,7 +28,7 @@ function orda_page_start(string $title): void {
         if(isset($item['divider'])) echo '<li class="orda-nav-divider">'.h($item['divider']).'</li>';
         echo '<li><a href="'.h($item['file']).'" class="orda-nav-link'.($current===$item['id']?' active':'').'"'.($current===$item['id']?' aria-current="page"':'').'>'.dao_icon($item['icon']).'<span class="orda-nav-title">'.h($item['title']).'</span></a></li>';
     }
-    echo '<li class="orda-nav-divider">ПРОСМОТР</li><li><a class="orda-nav-link" href="/" target="_blank" rel="noopener">'.dao_icon('site').'<span class="orda-nav-title">Открыть сайт ↗</span></a></li></ul><div class="orda-logout"><div class="whois">'.dao_icon('logo').h($_SESSION['user_login']).'</div><form method="post">'.csrf().'<button type="submit" class="orda-logout-button" name="action" value="logout" data-confirm="Выйти из админки?">Выйти</button></form></div></nav><main class="main" id="ordaMain"><div class="hub orda-blog-content"><nav class="orda-breadcrumbs"><a href="/admin.php">Дао</a><span class="separator">›</span><span>'.h(match($view){'edit'=>'Редактор записи','preview'=>'Предпросмотр','illustrator'=>'Иллюстратор','settings'=>'Настройки сайта','github'=>'GitHub','service'=>'Обслуживание','telegram'=>'Telegram',default=>'Записи'}).'</span></nav>';
+    echo '<li class="orda-nav-divider">ПРОСМОТР</li><li><a class="orda-nav-link" href="/" target="_blank" rel="noopener">'.dao_icon('site').'<span class="orda-nav-title">Открыть сайт ↗</span></a></li></ul><div class="orda-logout"><div class="whois">'.dao_icon('logo').h($_SESSION['user_login']).'</div><form method="post">'.csrf().'<button type="submit" class="orda-logout-button" name="action" value="logout" data-confirm="Выйти из админки?">Выйти</button></form></div></nav><main class="main" id="ordaMain"><div class="hub orda-blog-content"><nav class="orda-breadcrumbs"><a href="/admin.php">Дао</a><span class="separator">›</span><span>'.h(match($view){'edit'=>'Редактор записи','preview'=>'Предпросмотр','illustrator'=>'Иллюстратор','settings'=>'Настройки сайта','author'=>'Автор и форма','github'=>'GitHub','service'=>'Обслуживание','telegram'=>'Telegram',default=>'Записи'}).'</span></nav>';
 }
 function orda_page_end(): void {
     global $ordaPageMode;

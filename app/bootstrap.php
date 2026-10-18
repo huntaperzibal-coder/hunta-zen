@@ -33,6 +33,7 @@ require_once __DIR__ . '/categories.php';
 require_once __DIR__ . '/orda_auth.php';
 require_once __DIR__ . '/dao_brand.php';
 require_once __DIR__ . '/reader_services.php';
+require_once __DIR__ . '/author_pages.php';
 require_once __DIR__ . '/orda_layout.php';
 require_once __DIR__ . '/telegram.php';
 require_once __DIR__ . '/telegram_schedule.php';

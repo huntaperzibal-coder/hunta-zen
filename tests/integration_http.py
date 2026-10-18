@@ -41,7 +41,7 @@ with tempfile.TemporaryDirectory(prefix='hunta-http-') as tmp:
             assert 'theme-label' not in public_head and 'theme-icon' not in public_head,'theme toggle has no visible text or emoji'
             for icon in ['sun','moon']:
                 code,svg,_=request('/assets/icons/'+icon+'.svg');assert code==200 and '<svg' in svg,'copied theme icon served'
-            assert '/assets/js/reader-theme.js?v=2' in public_head and '/assets/css/reader.css?v=9' in public_head,'theme assets cache refreshed'
+            assert '/assets/js/reader-theme.js?v=2' in public_head and '/assets/css/reader.css?v=10' in public_head,'theme assets cache refreshed'
             assert '/assets/brand/dialogue.svg?v=2' in public_head and '/assets/brand/dao-admin.svg' not in public_head,'separate site identity'
             for path,heading in [('/admin.php?view=settings','Настройки'),('/admin.php?view=telegram','Telegram'),('/admin.php?view=service','Обслуживание'),('/admin.php?view=github','GitHub и резервные копии')]:
                 code,panel,_=request(path);assert code==200 and heading in panel,'navigation '+path
@@ -164,12 +164,22 @@ with tempfile.TemporaryDirectory(prefix='hunta-http-') as tmp:
             assert request('/services.php',opener=anonymous)[0]==200,'no-JS menu fallback'
             request('/admin.php',{**settings,'support_url':'javascript:alert(1)'})
             assert 'href="https://example.test/donate"' in request('/support.php',opener=anonymous)[1],'invalid support URL cannot replace saved destination'
+            author_settings={'action':'author_settings','csrf':csrf,'author_name':'Hunta','author_bio':'Автор <script>bad()</script>','operator_name':'Тестовый оператор','operator_address':'Тестовый адрес','operator_email':'author@example.test','feedback_enabled':'1'}
+            assert request('/admin.php',author_settings)[0]==200,'profile and legal settings saved'
+            assert 'Познакомиться' in request('/feedback.php',opener=anonymous)[1] and '&lt;script&gt;bad()&lt;/script&gt;' in request('/feedback.php',opener=anonymous)[1],'author profile escapes text'
+            assert 'Тестовый оператор' in request('/privacy.php',opener=anonymous)[1] and 'Согласие' in request('/consent.php',opener=anonymous)[1],'operator information in separate legal pages'
             guest=urllib.request.build_opener(urllib.request.HTTPCookieProcessor(http.cookiejar.CookieJar()))
             _,form,_=request('/feedback.php',opener=guest)
             feedback_csrf=re.search(r'name="csrf" value="([^"]+)"',form)[1]
             submission=re.search(r'name="submission" value="([^"]+)"',form)[1]
-            message={'csrf':feedback_csrf,'submission':submission,'message':'Личное сообщение <script>private()</script>','contact':'@reader','website':''}
+            answer=sum(map(int,re.search(r'сколько будет ([0-9]+) \+ ([0-9]+)',form).groups()))
+            consent_digest=re.search(r'name="consent_digest" value="([^"]+)"',form)[1]
+            message={'consent':'1','consent_digest':consent_digest,'answer':str(answer),'csrf':feedback_csrf,'submission':submission,'message':'Личное сообщение <script>private()</script>','contact':'@reader','website':''}
             assert request('/feedback.php',{**message,'csrf':'bad'},opener=guest)[0]==403,'public feedback requires CSRF'
+            assert request('/feedback.php',message,opener=guest)[0]==422,'instant form submission rejected'
+            time.sleep(3.05)
+            assert request('/feedback.php',{**message,'consent':''},opener=guest)[0]==422,'consent required server side'
+            assert request('/feedback.php',{**message,'answer':'99'},opener=guest)[0]==422,'challenge required server side'
             code,thanks,_=request('/feedback.php',message,opener=guest);assert code==200 and 'Сообщение сохранено' in thanks
             assert request('/feedback.php',message,opener=guest)[0]==200,'feedback submission is idempotent'
             assert request('/feedback.php',{**message,'submission':'a'*32},opener=guest)[0]==422,'feedback rate limited by address'
@@ -180,6 +190,13 @@ with tempfile.TemporaryDirectory(prefix='hunta-http-') as tmp:
             assert request('/admin.php',{'action':'feedback_read','message_id':message_id})[0]==403,'read marker requires CSRF'
             code,inbox,_=request('/admin.php',{'action':'feedback_read','message_id':message_id,'csrf':csrf});assert code==200 and 'Прочитано · ' in inbox
             assert 'Личное сообщение' not in request('/',opener=guest)[1],'messages never appear in public feed'
+            with sqlite3.connect(storage/'blog.sqlite') as check:
+                assert check.execute('SELECT count(*) FROM reader_feedback_consents').fetchone()[0]==1,'accepted consent recorded separately'
+            assert request('/admin.php',{'action':'feedback_delete','message_id':message_id})[0]==403,'message deletion needs CSRF'
+            request('/admin.php',{'action':'feedback_delete','message_id':message_id,'csrf':csrf})
+            with sqlite3.connect(storage/'blog.sqlite') as check:
+                assert check.execute('SELECT count(*) FROM reader_feedback').fetchone()[0]==0 and check.execute('SELECT count(*) FROM reader_feedback_consents').fetchone()[0]==0,'private message deletion also removes consent'
+
             # A real tiny H.264 MP4: authenticated multipart upload, private draft, byte seeking.
             mp4=base64.b64decode('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')
             def upload_video(content, token=csrf, opener=client):

@@ -13,6 +13,7 @@ jobs:
           php-version: ${{ matrix.php }}
           extensions: pdo_sqlite, mbstring, curl, fileinfo, dom
       - run: find app public tools tests -name '*.php' -exec php -l {} \;
+      - run: php tests/reader_feedback.php
       - run: php tests/database_backup.php
       - run: php tests/core.php
       - run: php tests/telegram.php
