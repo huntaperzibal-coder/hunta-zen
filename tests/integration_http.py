@@ -53,7 +53,7 @@ with tempfile.TemporaryDirectory(prefix='hunta-http-') as tmp:
             anonymous=urllib.request.build_opener()
             assert 'Очень личный черновик' not in request('/',opener=anonymous)[1],'draft hidden'
             assert request('/?p=istoriya-script-x-script',opener=anonymous)[0]==404
-            assert '/assets/js/editor-clipboard.js?v=1' in html and '/assets/js/editor.js?v=15' in html,'clipboard helper loads before editor'
+            assert '/assets/js/editor-clipboard.js?v=1' in html and '/assets/js/editor.js?v=16' in html,'clipboard helper loads before editor'
             assert html.index('/assets/js/editor-clipboard.js') < html.index('/assets/js/editor.js'),'clipboard script order'
             assert request('/proofread.php')[0]==404,'retired proofreading endpoint is unavailable'
             # Cover upload also saves the article; private photo must stay private.

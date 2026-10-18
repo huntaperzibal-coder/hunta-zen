@@ -37,6 +37,10 @@ try{
     $db->prepare('UPDATE posts SET body=? WHERE id=?')->execute(['Изменено',$vp['id']]);$db->exec("UPDATE telegram_schedule SET due_at=0 WHERE state='scheduled'");$calls=[];
     telegram_run_due($mock);tg_assert(count($calls)===1&&isset($calls[0][1]['video0']),'scheduled snapshot retains video after text edits');
     $override=$vp;$override['telegram_text']='Текст для канала';tg_assert(isset(telegram_plan($override)[0]['videos'][$video]),'Telegram text override retains video');
+    $large=fopen($dir.'/photos/'.$video,'c');ftruncate($large,50*1024*1024+1);fclose($large);clearstatcache();
+    tg_fails(fn()=>telegram_plan($vp),'site video above Telegram 50 MB limit rejected before network');
+    file_put_contents($dir.'/photos/'.$video,'test-only-mp4');clearstatcache();
+    tg_assert(isset(telegram_plan($vp)[0]['videos'][$video]),'smaller video still accepted for Telegram');
     unlink($dir.'/photos/'.$video);tg_fails(fn()=>telegram_plan($vp),'missing video rejected before sending');
     $p2=tg_post('unknown',str_repeat('я',6000));
     tg_fails(fn()=>telegram_send($p2['id'],fn()=>throw new RuntimeException('timeout')),'rich request timeout stops safely');

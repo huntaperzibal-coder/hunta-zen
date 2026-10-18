@@ -31,7 +31,7 @@
       data.append('file', file, file.name || 'photo.png');
       const xhr = new XMLHttpRequest();
       xhr.open('POST', '/editor-upload.php');
-      xhr.timeout = kind === 'video' ? 180000 : 60000;
+      xhr.timeout = kind === 'video' ? 600000 : 60000;
       xhr.upload.onprogress = e => { if (e.lengthComputable) progress(e.loaded / e.total * 100); };
       xhr.onload = () => {
         let result;

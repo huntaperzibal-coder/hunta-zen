@@ -157,7 +157,8 @@ function telegram_plan(array $p): array {
     if(count($videos)+($photo!==''?1:0)>50)throw new RuntimeException('В одном сообщении Telegram может быть не больше 50 вложений.');
     foreach($videos as $name=>$key){
         $file=$storage.'/photos/'.$name;
-        if(!is_file($file)||filesize($file)>VIDEO_MAX_BYTES)throw new RuntimeException('Видео недоступно или больше 45 МБ. Проверь его перед отправкой.');
+        if(!is_file($file))throw new RuntimeException('Видео недоступно. Проверь его перед отправкой.');
+        if(filesize($file)>50*1024*1024)throw new RuntimeException('Для сайта можно до 200 МБ, но Telegram принимает через бота видео до 50 МБ. Для отправки в канал уменьши ролик.');
         $rich['media'][]=['id'=>$key,'media'=>['type'=>'video','media'=>'attach://'.$key]];
     }
     return [['kind'=>'text','ordinal'=>0,'rich_message'=>$rich,'photo'=>$photo,'videos'=>$videos]];

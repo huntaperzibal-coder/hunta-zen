@@ -1,9 +1,9 @@
 <?php
 declare(strict_types=1);
-const VIDEO_MAX_BYTES=45*1024*1024;
+const VIDEO_MAX_BYTES=200*1024*1024;
 function video_upload_limit(): int {
     $limits=[VIDEO_MAX_BYTES];
-    foreach(['upload_max_filesize','post_max_size'] as $key){$raw=trim((string)ini_get($key));$n=(float)$raw;$unit=strtolower(substr($raw,-1));$n*=match($unit){'g'=>1073741824,'m'=>1048576,'k'=>1024,default=>1};if($n>0)$limits[]=(int)$n-65536;}
+    foreach(['upload_max_filesize','post_max_size'] as $key){$raw=trim((string)ini_get($key));$n=(float)$raw;$unit=strtolower(substr($raw,-1));$n*=match($unit){'g'=>1073741824,'m'=>1048576,'k'=>1024,default=>1};if($n>0)$limits[]=(int)$n-($key==='post_max_size'?65536:0);}
     return max(0,min($limits));
 }
 function article_video_name(string $url): ?string {
