@@ -10,8 +10,13 @@ if($_SERVER['REQUEST_METHOD']==='POST'){
     catch(PDOException $e){http_response_code(503);$error='Не удалось сохранить сообщение. Попробуй позже.';error_log('Reader feedback storage failure');}
     catch(RuntimeException $e){http_response_code(422);$error=$e->getMessage();}
 }
-page_start('Познакомиться — '.setting('title'));
-echo '<section class="reader-service-page author-page"><nav class="reader-page-nav" aria-label="Навигация по разделам"><a class="back" href="/">← К историям</a><a href="/support.php">'.dao_icon('heart').'<span>Поддержать</span></a></nav><h1>Познакомиться</h1>';
+page_start(setting('contact_title','Познакомиться').' — '.setting('title'));
+echo '<section class="reader-service-page author-page"><nav class="reader-page-nav" aria-label="Навигация по разделам"><a class="back" href="/">← К историям</a><a href="/support.php">'.dao_icon('heart').'<span>Поддержать</span></a></nav><h1>'.h(setting('contact_title','Познакомиться')).'</h1>';
+if(trim(setting('contact_text'))!==''){
+    echo '<div class="author-intro">';
+    foreach(preg_split('/\R[\t ]*\R/u',trim(setting('contact_text'))) as $paragraph)echo '<p>'.nl2br(h($paragraph)).'</p>';
+    echo '</div>';
+}
 $photo=reader_public_photo('author_photo');
 if($photo!=='')echo '<figure class="author-portrait"><a class="story-image-link" data-lightbox-image href="'.h(photo_url($photo)).'" aria-label="Открыть фото автора полностью"><img src="'.h(photo_url($photo)).'" alt="'.h(setting('author_name','Hunta')).'" decoding="async"></a></figure>';
 echo '<section class="author-message" id="message"><h2>Обратная связь</h2>';

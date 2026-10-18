@@ -159,6 +159,14 @@ with tempfile.TemporaryDirectory(prefix='hunta-http-') as tmp:
             # Public service menu and reader feedback; no external messages or payments.
             settings={'action':'settings','csrf':csrf,'title':'Гена и Винни','description':'','telegram_url':'https://t.me/example_channel','support_url':'https://example.test/donate','support_text':'Для новых историй'}
             assert request('/admin.php',settings)[0]==200
+            editable={**settings,'support_title':'Спасибо за поддержку','contact_title':'На связи','contact_text':'Первый абзац\n\nВторой <script>bad()</script> абзац'}
+            assert request('/admin.php',editable)[0]==200
+            support_page=request('/support.php',opener=anonymous)[1]
+            contact_page=request('/feedback.php',opener=anonymous)[1]
+            assert '<h1>Спасибо за поддержку</h1>' in support_page and '<p>Для новых историй</p>' in support_page,'support title and text editable'
+            assert '<h1>На связи</h1>' in contact_page and '<p>Первый абзац</p>' in contact_page and '&lt;script&gt;bad()&lt;/script&gt;' in contact_page,'contact title, paragraphs and safe escaping'
+            request('/admin.php',settings)
+            assert '<h1>На связи</h1>' in request('/feedback.php',opener=anonymous)[1],'older settings form preserves page text'
             home=request('/',opener=anonymous)[1]
             assert 'data-service-toggle' in home and '<dialog id="reader-services"' in home and 'reader-services.js?v=1' in home,'hamburger and native service dialog'
             assert home.count('https://t.me/example_channel')==1,'channel link lives in service menu without header duplicate'
