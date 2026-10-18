@@ -6,7 +6,7 @@ function reader_support_url(string $url): string {
 }
 function reader_service_links(): string {
     $telegram=setting('telegram_url');$html='';
-    if(preg_match('~^https://t\.me/[A-Za-z0-9_]+$~D',$telegram))$html.='<a href="'.h($telegram).'" target="_blank" rel="noopener">'.dao_icon('telegram').'<span>Читать в Telegram</span><span aria-hidden="true">↗</span></a>';
+    if(preg_match('~^https://t\.me/[A-Za-z0-9_]+$~D',$telegram))$html.='<a href="'.h($telegram).'" target="_blank" rel="noopener">'.dao_icon('telegram').'<span>Читать в Telegram</span></a>';
     return $html.'<a href="/support.php">'.dao_icon('heart').'<span>Поддержать</span></a><a href="/feedback.php">'.dao_icon('mail').'<span>Познакомиться</span></a>';
 }
 function reader_service_dialog(): string {

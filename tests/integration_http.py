@@ -41,7 +41,7 @@ with tempfile.TemporaryDirectory(prefix='hunta-http-') as tmp:
             assert 'theme-label' not in public_head and 'theme-icon' not in public_head,'theme toggle has no visible text or emoji'
             for icon in ['sun','moon']:
                 code,svg,_=request('/assets/icons/'+icon+'.svg');assert code==200 and '<svg' in svg,'copied theme icon served'
-            assert '/assets/js/reader-theme.js?v=2' in public_head and '/assets/css/reader.css?v=11' in public_head,'theme assets cache refreshed'
+            assert '/assets/js/reader-theme.js?v=2' in public_head and '/assets/css/reader.css?v=12' in public_head,'theme assets cache refreshed'
             assert '/assets/brand/dialogue.svg?v=2' in public_head and '/assets/brand/dao-admin.svg' not in public_head,'separate site identity'
             for path,heading in [('/admin.php?view=settings','Настройки'),('/admin.php?view=telegram','Telegram'),('/admin.php?view=service','Обслуживание'),('/admin.php?view=github','GitHub и резервные копии')]:
                 code,panel,_=request(path);assert code==200 and heading in panel,'navigation '+path
@@ -159,13 +159,25 @@ with tempfile.TemporaryDirectory(prefix='hunta-http-') as tmp:
             home=request('/',opener=anonymous)[1]
             assert 'data-service-toggle' in home and '<dialog id="reader-services"' in home and 'reader-services.js?v=1' in home,'hamburger and native service dialog'
             assert home.count('https://t.me/example_channel')==1,'channel link lives in service menu without header duplicate'
+            assert '<span>Читать в Telegram</span><span aria-hidden="true">↗</span>' not in home,'Telegram menu has no external-link arrow'
+            assert 'class="service-crosslink"' in request('/support.php',opener=anonymous)[1] and 'познакомиться с автором</a>' in request('/support.php',opener=anonymous)[1],'support links to author within prose'
+            assert 'поддержать их продолжение</a>' in request('/feedback.php',opener=anonymous)[1],'author links to support within prose'
+
             assert 'В этой ленте' in home and 'category-tabs' in home,'reading navigation remains in place'
             assert 'href="https://example.test/donate"' in request('/support.php',opener=anonymous)[1]
             assert request('/services.php',opener=anonymous)[0]==200,'no-JS menu fallback'
             request('/admin.php',{**settings,'support_url':'javascript:alert(1)'})
             assert 'href="https://example.test/donate"' in request('/support.php',opener=anonymous)[1],'invalid support URL cannot replace saved destination'
             author_settings={'action':'author_settings','csrf':csrf,'author_name':'Hunta','author_bio':'Автор <script>bad()</script>','operator_name':'Тестовый оператор','operator_address':'Тестовый адрес','operator_email':'author@example.test','feedback_enabled':'1'}
+            invalid_author={**author_settings,'operator_name':'Введённое имя не теряется','operator_address':'','operator_email':'author@example.test'}
+            code,failed,_=request('/admin.php',invalid_author)
+            assert code==200 and 'Не удалось сохранить' in failed and 'Введённое имя не теряется' in failed,'validation error preserves submitted author fields'
+            assert 'Введённые значения оставлены в полях' in failed and 'id="author-settings-status"' in failed,'inline author validation is visible'
             assert request('/admin.php',author_settings)[0]==200,'profile and legal settings saved'
+            _,saved_author,_=request('/admin.php?view=author&saved=1')
+            assert 'Форма включена' in saved_author and 'Изменения сохранены' in saved_author,'saved author screen confirms actual availability'
+            assert 'type="text" name="operator_name"' in saved_author and 'author-settings-form' in saved_author,'author text inputs use the scoped form styling'
+
             assert 'Познакомиться' in request('/feedback.php',opener=anonymous)[1] and '<script>bad()' not in request('/feedback.php',opener=anonymous)[1],'author profile escapes text'
             assert 'Тестовый оператор' in request('/privacy.php',opener=anonymous)[1] and 'Согласие' in request('/consent.php',opener=anonymous)[1],'operator information in separate legal pages'
             guest=urllib.request.build_opener(urllib.request.HTTPCookieProcessor(http.cookiejar.CookieJar()))

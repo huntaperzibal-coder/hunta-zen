@@ -4,6 +4,7 @@ require dirname(__DIR__).'/app/bootstrap.php';
 header('Cache-Control: no-store'); header('X-Robots-Tag: noindex, nofollow');
 session_open();
 $action=(string)($_POST['action']??''); $view=(string)($_GET['view']??'list'); $error=''; $unsaved=null; $savedRevision=null;
+if($action==='author_settings')$view='author';
 $telegramInline=in_array($action,['telegram_schedule','telegram_cancel'],true) && ($_POST['telegram_inline']??'')==='1';
 if ($_SERVER['REQUEST_METHOD']==='POST') {
     verify_csrf();
@@ -24,7 +25,7 @@ if ($_SERVER['REQUEST_METHOD']==='POST') {
         try {
             if ($action==='logout') { $_SESSION=[]; session_destroy();redirect('/admin.php?view=login'); }
             if ($action==='telegram_connection') { telegram_save_connection($_POST);redirect('/admin.php?view=telegram&saved=1'); }
-            if ($action==='author_settings') { reader_author_settings_save($_POST,$_FILES);redirect('/admin.php?view=author&saved=1'); }
+            if ($action==='author_settings') { reader_author_settings_save($_POST,$_FILES);redirect('/admin.php?view=author&saved=1#author-settings-status'); }
             if ($action==='feedback_delete') { $db->prepare('DELETE FROM reader_feedback WHERE id=?')->execute([(int)($_POST['message_id']??0)]);audit('feedback:delete');redirect('/admin.php?view=feedback'); }
             if ($action==='feedback_read') { $db->prepare('UPDATE reader_feedback SET read_at=? WHERE id=?')->execute([time(),(int)($_POST['message_id']??0)]);redirect('/admin.php?view=feedback'); }
             if ($action==='new') {
@@ -113,8 +114,8 @@ if ($_SERVER['REQUEST_METHOD']==='POST') {
 }
 if (!authenticated()) $view='login'; else guard();
 page_start('Дао — '.setting('title'),true);
-if ($error) echo '<div class="auth-error" role="alert">'.h($error).'</div>';
-if (isset($_GET['saved'])) echo '<div class="auth-success">Сохранено.</div>';
+if ($error && $view!=='author') echo '<div class="auth-error" role="alert">'.h($error).'</div>';
+if (isset($_GET['saved']) && $view!=='author') echo '<div class="auth-success">Сохранено.</div>';
 if ($view==='login') {
     echo '<div class="auth-title">'.dao_icon('logo').'<span>Дао</span><small>'.h(setting('title')).'</small></div><form method="post">'.csrf().'<input type="hidden" name="action" value="login"><label class="sr-only" for="login">Логин</label><input type="text" id="login" class="auth-input" name="login" placeholder="Логин" autocomplete="username" required><div class="password-wrap"><label class="sr-only" for="password">Пароль</label><input id="password" class="auth-input" type="password" name="password" placeholder="Пароль" autocomplete="current-password" required><button type="button" class="pass-toggle" aria-label="Показать пароль" aria-pressed="false">'.dao_icon('eye').'</button></div><button type="submit" class="auth-btn">Войти</button></form>';
 
@@ -144,7 +145,7 @@ if ($view==='login') {
 } elseif ($view==='settings') {
     echo '<p class="eyebrow">Твой уголок</p><h1>Настройки</h1><form method="post">'.csrf().'<input type="hidden" name="action" value="settings"><label>Название сайта<input type="text" class="user-input" name="title" required value="'.h(setting('title')).'"></label><label>Описание<textarea class="user-input" name="description" rows="3">'.h(setting('description')).'</textarea></label><label>Ссылка на Telegram-канал<input type="text" class="user-input" name="telegram_url" placeholder="https://t.me/channel" value="'.h(setting('telegram_url')).'"></label><label>Ссылка для поддержки<input class="user-input" type="url" name="support_url" value="'.h(setting('support_url')).'" placeholder="https://…"></label><label>Текст на странице поддержки<textarea class="user-input" name="support_text" rows="3" maxlength="2000">'.h(setting('support_text','Если тебе здесь хорошо — можно поддержать автора. Чтобы у Гены и Винни всегда находилось время на разговор.')).'</textarea></label><label><input type="checkbox" name="indexed" value="1"'.(setting('indexed')==='1'?' checked':'').'> Разрешить индексацию поисковиками</label><button type="submit" class="btn-main">Сохранить</button></form><p class="hint">Бот и канал для отправки подключаются в разделе <a href="/admin.php?view=telegram">Telegram</a>. Ссылка выше — только ссылка для читателей сайта.</p>';
 } elseif ($view==='author') {
-    reader_author_settings_page();
+    reader_author_settings_page($action==='author_settings'&&$error!==''?$_POST:null,$error);
 } elseif ($view==='feedback') {
     echo '<h1>Обратная связь</h1><p class="hint">Личные сообщения читателей сайта. Контакты не публикуются.</p>';
     $messages=$db->query('SELECT f.*,c.version AS consent_version,c.document AS consent_document FROM reader_feedback f LEFT JOIN reader_feedback_consents c ON c.feedback_id=f.id ORDER BY f.read_at IS NULL DESC,f.id DESC LIMIT 100')->fetchAll();
