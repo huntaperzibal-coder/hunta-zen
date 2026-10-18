@@ -25,3 +25,16 @@
 .reading-intro{max-width:1020px;margin:0 auto 18px;padding:0 12px}.reading-intro h1{font-family:system-ui;font-size:20px;letter-spacing:normal;line-height:1.3;margin:0 0 5px}.reading-intro p,.story-author{font-family:system-ui;font-size:13px;line-height:1.5;opacity:.75;margin:0 0 12px}.story-author a{color:inherit}
 
 .blog .reader-service-page .reader-page-nav{display:flex;align-items:center;flex-wrap:wrap;gap:12px 22px;margin:0 0 24px;font:13px/1.5 system-ui}.blog .reader-service-page .reader-page-nav a{display:inline-flex;align-items:center;gap:7px;padding:4px 0;color:var(--muted);text-underline-offset:3px}.blog .reader-service-page .reader-page-nav .back{margin:0}.reader-page-nav svg{width:17px;height:17px;flex:none}
+
+/* Author portrait and feedback share one reading column. */
+.blog .author-page{max-width:620px}
+.blog .author-page .author-portrait{width:100%;margin:0 0 24px}
+.blog .author-page .author-portrait img{display:block;width:100%;max-width:100%;height:auto}
+.blog .author-message form{width:100%;max-width:none}
+.blog .author-message .feedback-consent,.blog .author-message .feedback-privacy{font:13px/1.55 system-ui!important;letter-spacing:normal}
+.blog .author-message .feedback-consent{margin:18px 0 7px}
+.blog .author-message .feedback-privacy{margin:0 0 22px 28px;color:var(--muted)}
+.blog .author-message .feedback-consent a,.blog .author-message .feedback-privacy a{text-decoration-thickness:1px;text-underline-offset:3px}
+.blog .author-message .feedback-check{display:flex;align-items:center;flex-wrap:wrap;gap:10px 16px;padding:12px 14px}
+.blog .author-message .feedback-check label{margin:0!important;flex:1}
+.blog .author-message .feedback-check input{width:76px;flex:0 0 76px;margin:0;min-height:40px}
