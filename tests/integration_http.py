@@ -298,6 +298,9 @@ with tempfile.TemporaryDirectory(prefix='hunta-http-') as tmp:
             verification.update({'action':'settings','csrf':csrf,'indexed':'1','google_verification':'<meta name="google-site-verification" content="google_test-code" />','yandex_verification':'abc123'})
             assert request('/admin.php',verification)[0]==200,'verification codes save through authenticated CSRF form'
             verified=request('/',opener=anonymous)[1]
+            head=re.search(r'<head>(.*?)</head>',verified,re.S)
+            assert head and '<meta name="google-site-verification" content="google_test-code">' in head[1] and '<meta name="yandex-verification" content="abc123">' in head[1],'verification must be inside explicit document head'
+            assert verified.index('</head>') < verified.index('<body'),'head is closed before reader content'
             assert '<meta name="google-site-verification" content="google_test-code">' in verified and '<meta name="yandex-verification" content="abc123">' in verified,'public head contains validated webmaster tokens'
             code,missing,_=request('/?page=999',opener=anonymous);assert code==404,'empty pagination page is a true 404'
             with sqlite3.connect(storage/'blog.sqlite') as records:records.execute("UPDATE settings SET value='0' WHERE key='indexed'")
