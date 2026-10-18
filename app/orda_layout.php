@@ -17,6 +17,7 @@ function orda_page_start(string $title): void {
         ['id'=>'published','title'=>'На сайте','file'=>'/admin.php?status=published','icon'=>'published'],
         ['id'=>'telegram','title'=>'Telegram','file'=>'/admin.php?view=telegram','icon'=>'telegram'],
         ['id'=>'illustrator','title'=>'Иллюстратор','file'=>'/admin.php?view=illustrator','icon'=>'draft'],
+        ['id'=>'feedback','title'=>'Обратная связь','file'=>'/admin.php?view=feedback','icon'=>'mail'],
         ['id'=>'settings','title'=>'Настройки сайта','file'=>'/admin.php?view=settings','icon'=>'settings','divider'=>'САЙТ'],
         ['id'=>'service','title'=>'Резервные копии и журнал','file'=>'/admin.php?view=service','icon'=>'backup','divider'=>'ОБСЛУЖИВАНИЕ'],
     ];

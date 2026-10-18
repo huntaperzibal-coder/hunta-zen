@@ -71,3 +71,10 @@ CREATE TABLE IF NOT EXISTS telegram_schedule (
 );
 CREATE UNIQUE INDEX IF NOT EXISTS telegram_one_scheduled ON telegram_schedule(post_id,channel) WHERE state IN ('scheduled','running');
 INSERT OR IGNORE INTO schema_versions VALUES(6,datetime('now'));
+
+CREATE TABLE IF NOT EXISTS reader_feedback (
+ id INTEGER PRIMARY KEY, submission TEXT NOT NULL UNIQUE, message TEXT NOT NULL, contact TEXT NOT NULL DEFAULT '',
+ client_key TEXT NOT NULL, created_at INTEGER NOT NULL, read_at INTEGER
+);
+CREATE INDEX IF NOT EXISTS reader_feedback_rate ON reader_feedback(client_key,created_at);
+INSERT OR IGNORE INTO schema_versions VALUES(7,datetime('now'));

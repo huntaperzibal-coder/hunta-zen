@@ -41,7 +41,7 @@ with tempfile.TemporaryDirectory(prefix='hunta-http-') as tmp:
             assert 'theme-label' not in public_head and 'theme-icon' not in public_head,'theme toggle has no visible text or emoji'
             for icon in ['sun','moon']:
                 code,svg,_=request('/assets/icons/'+icon+'.svg');assert code==200 and '<svg' in svg,'copied theme icon served'
-            assert '/assets/js/reader-theme.js?v=2' in public_head and '/assets/css/reader.css?v=8' in public_head,'theme assets cache refreshed'
+            assert '/assets/js/reader-theme.js?v=2' in public_head and '/assets/css/reader.css?v=9' in public_head,'theme assets cache refreshed'
             assert '/assets/brand/dialogue.svg?v=2' in public_head and '/assets/brand/dao-admin.svg' not in public_head,'separate site identity'
             for path,heading in [('/admin.php?view=settings','Настройки'),('/admin.php?view=telegram','Telegram'),('/admin.php?view=service','Обслуживание')]:
                 code,panel,_=request(path);assert code==200 and heading in panel,'navigation '+path
@@ -146,6 +146,33 @@ with tempfile.TemporaryDirectory(prefix='hunta-http-') as tmp:
             history=cancelled['html'].split('class="tg-schedule-history"',1)[1]
             assert history.startswith('><summary>') and '<details class="tg-schedule-history" open' not in cancelled['html'],'past attempts collapsed separately'
             assert 'не дополнительные публикации в очереди' in history and 'Отменить эту отправку' not in history,'old history has no cancel controls'
+            # Public service menu and reader feedback; no external messages or payments.
+            settings={'action':'settings','csrf':csrf,'title':'Гена и Винни','description':'','telegram_url':'https://t.me/example_channel','support_url':'https://example.test/donate','support_text':'Для новых историй'}
+            assert request('/admin.php',settings)[0]==200
+            home=request('/',opener=anonymous)[1]
+            assert 'data-service-toggle' in home and '<dialog id="reader-services"' in home and 'reader-services.js?v=1' in home,'hamburger and native service dialog'
+            assert home.count('https://t.me/example_channel')==1,'channel link lives in service menu without header duplicate'
+            assert 'В этой ленте' in home and 'category-tabs' in home,'reading navigation remains in place'
+            assert 'href="https://example.test/donate"' in request('/support.php',opener=anonymous)[1]
+            assert request('/services.php',opener=anonymous)[0]==200,'no-JS menu fallback'
+            request('/admin.php',{**settings,'support_url':'javascript:alert(1)'})
+            assert 'href="https://example.test/donate"' in request('/support.php',opener=anonymous)[1],'invalid support URL cannot replace saved destination'
+            guest=urllib.request.build_opener(urllib.request.HTTPCookieProcessor(http.cookiejar.CookieJar()))
+            _,form,_=request('/feedback.php',opener=guest)
+            feedback_csrf=re.search(r'name="csrf" value="([^"]+)"',form)[1]
+            submission=re.search(r'name="submission" value="([^"]+)"',form)[1]
+            message={'csrf':feedback_csrf,'submission':submission,'message':'Личное сообщение <script>private()</script>','contact':'@reader','website':''}
+            assert request('/feedback.php',{**message,'csrf':'bad'},opener=guest)[0]==403,'public feedback requires CSRF'
+            code,thanks,_=request('/feedback.php',message,opener=guest);assert code==200 and 'Сообщение сохранено' in thanks
+            assert request('/feedback.php',message,opener=guest)[0]==200,'feedback submission is idempotent'
+            assert request('/feedback.php',{**message,'submission':'a'*32},opener=guest)[0]==422,'feedback rate limited by address'
+            _,inbox,_=request('/admin.php?view=feedback')
+            assert inbox.count('Личное сообщение')==1 and '&lt;script&gt;private()&lt;/script&gt;' in inbox and '<script>private()' not in inbox,'private inbox escapes content and avoids duplicate submissions'
+            assert 'Личное сообщение' not in request('/admin.php?view=feedback',opener=guest)[1],'reader inbox needs author login'
+            message_id=re.search(r'name="message_id" value="(\d+)"',inbox)[1]
+            assert request('/admin.php',{'action':'feedback_read','message_id':message_id})[0]==403,'read marker requires CSRF'
+            code,inbox,_=request('/admin.php',{'action':'feedback_read','message_id':message_id,'csrf':csrf});assert code==200 and 'Прочитано · ' in inbox
+            assert 'Личное сообщение' not in request('/',opener=guest)[1],'messages never appear in public feed'
             subprocess.run([PHP,str(ROOT/'tools/backup.php')],env=env,check=True,capture_output=True)
             copies=list((storage/'backups').iterdir());assert len(copies)==1 and (copies[0]/'photos'/photo).exists(),'backup photos'
             print('OK: HTTP login, CSRF, drafts, upload, private media, publishing, XSS, conflicts, backup')
