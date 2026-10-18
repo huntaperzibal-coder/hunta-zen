@@ -61,6 +61,8 @@ with tempfile.TemporaryDirectory(prefix='hunta-http-') as tmp:
             assert 'Очень личный черновик' not in request('/',opener=anonymous)[1],'draft hidden'
             assert request('/?p=istoriya-script-x-script',opener=anonymous)[0]==404
             assert '/assets/js/editor-clipboard.js?v=1' in html and '/assets/js/editor.js?v=17' in html,'clipboard helper loads before editor'
+            assert 'Анонс в ленте' not in html and 'Описание для ссылок' in html,'metadata description is named accurately'
+            assert html.index('id="telegram"') < html.index('<summary>Фотографии</summary>'),'publishing actions precede optional media settings'
             assert html.index('/assets/js/video-preview.js') < html.index('/assets/js/editor.js'),'video preparation loads before editor'
             assert html.index('/assets/js/editor-clipboard.js') < html.index('/assets/js/editor.js'),'clipboard script order'
             assert request('/proofread.php')[0]==404,'retired proofreading endpoint is unavailable'
@@ -140,15 +142,15 @@ with tempfile.TemporaryDirectory(prefix='hunta-http-') as tmp:
             assert request('/admin.php',{**schedule,'csrf':'wrong'})[0]==403,'inline scheduling needs CSRF'
             code,result,url=request('/admin.php',schedule);assert code==200,result
             inline=json.loads(result);assert '#telegram' not in url and 'html' in inline and 'Отправка запланирована' in inline['message'],'JSON scheduling returns in place, no redirect'
-            assert 'Текущая отложенная отправка' in inline['html'] and 'Отменить эту отправку' in inline['html'],'cancel belongs to a clearly labelled current task'
-            assert 'Текст на сайте и уже отправленные сообщения сохраняются' in inline['html'],'cancel scope explained'
+            assert 'Отправка назначена' in inline['html'] and 'Отменить эту отправку' in inline['html'],'cancel belongs to a clearly labelled current task'
+            assert 'Отменяет только расписание' in inline['html'],'cancel scope explained'
             _,panel,_=request('/admin.php?view=edit&id='+pid)
             assert 'name="telegram_due" value="'+schedule['telegram_due']+'"' in panel,'scheduled time shown in input'
             stale=request('/admin.php',{**schedule,'revision':current_revision})
             assert stale[0]==409 and json.loads(stale[1])['revision'] is None,'stale AJAX scheduling cannot overwrite author changes'
             cancel={**schedule,'action':'telegram_cancel','revision':inline['revision']}
             code,result,_=request('/admin.php',cancel);assert code==200,result
-            cancelled=json.loads(result);assert 'Ожидающая отправка отменена' in cancelled['message'] and 'Отложенной отправки нет' in cancelled['html']
+            cancelled=json.loads(result);assert 'Ожидающая отправка отменена' in cancelled['message'] and 'value="telegram_cancel"' not in cancelled['html']
             code,again,_=request('/admin.php',{**cancel,'revision':cancelled['revision']});assert code==200
             assert 'Ожидающей отправки уже нет' in json.loads(again)['message'],'late cancellation does not claim a completed task was cancelled'
             history=cancelled['html'].split('class="tg-schedule-history"',1)[1]

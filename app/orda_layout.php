@@ -7,7 +7,7 @@ declare(strict_types=1);
 function orda_page_start(string $title): void {
     global $ordaPageMode;
     $login=!authenticated();$ordaPageMode=$login?'auth':'shell';
-    echo '<!doctype html><html lang="ru"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex,nofollow"><title>'.h($title).'</title>'.dao_brand_head(true).'<link rel="stylesheet" href="/styles_core/adminka/stili_orda.css?v=1"><link rel="stylesheet" href="/assets/css/orda_blog.css?v=15"><link rel="stylesheet" href="/assets/css/reading-type.css?v=2"></head><body class="'.($login?'auth':'orda-shell').'">';
+    echo '<!doctype html><html lang="ru"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex,nofollow"><title>'.h($title).'</title>'.dao_brand_head(true).'<link rel="stylesheet" href="/styles_core/adminka/stili_orda.css?v=1"><link rel="stylesheet" href="/assets/css/orda_blog.css?v=16"><link rel="stylesheet" href="/assets/css/reading-type.css?v=2"></head><body class="'.($login?'auth':'orda-shell').'">';
     if ($login) { echo '<div class="auth-box">';return; }
     $view=(string)($_GET['view']??'list');$status=(string)($_GET['status']??'');
     $status=match((string)($_GET['scope']??'')){'local'=>'draft','site'=>'published',default=>$status};
