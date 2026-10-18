@@ -106,19 +106,24 @@ function render_legacy_body(string $body): string {
     $safe=preg_replace('/\*\*([^*\n]+)\*\*/','<strong>$1</strong>',$safe);
     return '<p>'.str_replace(["\r\n","\n\n","\n"],["\n",'</p><p>','<br>'],$safe).'</p>';
 }
-function page_start(string $title, bool $admin=false, string $description='', string $cover=''): void {
-    $indexed=!$admin && setting('indexed')==='1';
+function page_start(string $title, bool $admin=false, string $description='', string $cover='', array $seo=[]): void {
+    $indexed=!$admin && setting('indexed')==='1' && http_response_code()<400 && !in_array($_SERVER['SCRIPT_NAME']??'',['/privacy.php','/consent.php','/services.php'],true);
+    $nonce=base64_encode(random_bytes(18));
     header('X-Content-Type-Options: nosniff'); header('Referrer-Policy: same-origin');
     $stylePolicy=$admin?"'self' 'unsafe-inline'":"'self'";
-    header("Content-Security-Policy: default-src 'self'; img-src 'self' data: blob:; style-src $stylePolicy; script-src 'self'; frame-src 'self' blob:; frame-ancestors 'none'; base-uri 'none'; form-action 'self'");
+    header("Content-Security-Policy: default-src 'self'; img-src 'self' data: blob:; style-src $stylePolicy; script-src 'self' 'nonce-$nonce'; frame-src 'self' blob:; frame-ancestors 'none'; base-uri 'none'; form-action 'self'");
     if (!$indexed) header('X-Robots-Tag: noindex, nofollow');
     if ($admin) { orda_page_start($title);return; }
     global $config;
-    $canonical=rtrim($config['site_url'],'/').'/'.(isset($_GET['p'])?'?p='.rawurlencode((string)$_GET['p']):(!empty($_GET['category'])?'?category='.rawurlencode((string)$_GET['category']):''));
-    if(in_array($_SERVER['SCRIPT_NAME']??'',['/support.php','/feedback.php','/services.php','/privacy.php','/consent.php'],true))$canonical=rtrim($config['site_url'],'/').$_SERVER['SCRIPT_NAME'];
-    $og='<meta property="og:type" content="article"><meta property="og:title" content="'.h($title).'"><meta property="og:description" content="'.h($description ?: setting('description')).'"><meta property="og:url" content="'.h($canonical).'"><link rel="canonical" href="'.h($canonical).'">';
-    if ($cover) $og.='<meta property="og:image" content="'.h(rtrim($config['site_url'],'/').photo_url($cover)).'">';
-    echo '<!doctype html><html lang="ru"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>'.h($title).'</title><meta name="description" content="'.h($description ?: setting('description')).'">'.($admin?'':$og).dao_brand_head(false).'<script src="/assets/js/reader-theme.js?v=2"></script><link rel="stylesheet" href="/assets/css/app.css?v=5"><link rel="stylesheet" href="/assets/css/reader.css?v=12"><link rel="stylesheet" href="/assets/css/reading-type.css?v=2"><body class="'.($admin?'workshop':'blog').'"><header><div class="reader-identity"><a href="/services.php" class="reader-service-toggle" data-service-toggle aria-label="Открыть меню" aria-haspopup="dialog" aria-expanded="false" aria-controls="reader-services">'.dao_icon('menu').'</a><a class="brand" href="/"><img class="site-avatar" src="/assets/brand/dialogue.svg?v=2" width="42" height="42" alt="">'.h(setting('title')).'</a></div><nav>';
+    $canonical=seo_canonical();
+    $description=$description?:setting('description');
+    $type=($seo['@type']??'')==='BlogPosting'?'article':'website';
+    $og='<meta property="og:type" content="'.$type.'"><meta property="og:site_name" content="'.h(setting('title')).'"><meta property="og:locale" content="ru_RU"><meta property="og:title" content="'.h($title).'"><meta property="og:description" content="'.h($description).'"><meta property="og:url" content="'.h($canonical).'"><link rel="canonical" href="'.h($canonical).'"><meta name="twitter:card" content="'.($cover?'summary_large_image':'summary').'">';
+    if ($cover) $og.='<meta property="og:image" content="'.h(seo_base().photo_url($cover)).'"><meta property="og:image:alt" content="'.h($title).'">';
+    foreach(['google-site-verification'=>'google_verification','yandex-verification'=>'yandex_verification'] as $name=>$key){$value=setting($key);if($value!==''&&preg_match('/^[A-Za-z0-9_-]{1,200}$/D',$value))$og.='<meta name="'.$name.'" content="'.h($value).'">';}
+    if(!$cover)$og.='<meta property="og:image" content="'.h(seo_base().'/assets/brand/dialogue-512.png').'">';
+    if($seo)$og.='<script type="application/ld+json" nonce="'.h($nonce).'">'.json_encode($seo,JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES|JSON_HEX_TAG|JSON_HEX_AMP|JSON_HEX_APOS|JSON_HEX_QUOT|JSON_THROW_ON_ERROR).'</script>';
+    echo '<!doctype html><html lang="ru"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>'.h($title).'</title><meta name="description" content="'.h($description ?: setting('description')).'">'.($admin?'':$og).dao_brand_head(false).'<script src="/assets/js/reader-theme.js?v=2"></script><link rel="stylesheet" href="/assets/css/app.css?v=5"><link rel="stylesheet" href="/assets/css/reader.css?v=13"><link rel="stylesheet" href="/assets/css/reading-type.css?v=2"><body class="'.($admin?'workshop':'blog').'"><header><div class="reader-identity"><a href="/services.php" class="reader-service-toggle" data-service-toggle aria-label="Открыть меню" aria-haspopup="dialog" aria-expanded="false" aria-controls="reader-services">'.dao_icon('menu').'</a><a class="brand" href="/"><img class="site-avatar" src="/assets/brand/dialogue.svg?v=2" width="42" height="42" alt="">'.h(setting('title')).'</a></div><nav>';
     if ($admin && authenticated()) echo '<a href="/admin.php">Записи</a><a href="/admin.php?view=settings">Настройки</a><a href="/admin.php?view=service">Обслуживание</a><form method="post">'.csrf().'<button class="quiet" name="action" value="logout">Выйти</button></form>';
 
     echo '<button class="theme-toggle" type="button" aria-label="Включить тёмную тему" aria-pressed="false" hidden></button></nav></header><main>';

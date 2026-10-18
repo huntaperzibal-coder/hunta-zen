@@ -51,7 +51,7 @@ function telegram_document(array $p): array {
         };
         foreach($doc->getElementsByTagName('body')->item(0)->childNodes as $node)$walk($node);
     }
-    $text=rtrim($text).(telegram_has_footer($p)&&$p['status']==='published'?"\n\n".rtrim($config['site_url'],'/').'/?p='.rawurlencode($p['slug']):'');
+    $text=rtrim($text).(telegram_has_footer($p)&&$p['status']==='published'?"\n\n".seo_base().'/?p='.rawurlencode($p['slug']):'');
     $entities=array_values(array_filter($entities,fn($e)=>$e['length']>0 && $e['offset']+$e['length']<=telegram_units($text)));
     // Telegram forbids bold/italic/link ranges overlapping code/pre ranges.
     $codeRanges=array_filter($entities,fn($e)=>in_array($e['type'],['code','pre'],true));
@@ -142,7 +142,7 @@ function telegram_plan(array $p): array {
     $videos=[];$story=telegram_rich_body($p['body'],$videos);
     $html.=trim((string)$p['telegram_text'])!==''?'<p>'.str_replace("\n",'<br>',h(trim($p['telegram_text']))).'</p>':$story;
     if(trim((string)$p['telegram_text'])!=='')foreach($videos as $name=>$key)$html.='<video src="tg://video?id='.$key.'"></video>';
-    $url=rtrim($config['site_url'],'/').'/?p='.rawurlencode($p['slug']);
+    $url=seo_base().'/?p='.rawurlencode($p['slug']);
     if(telegram_has_footer($p))$html.='<blockquote><p><b>Гена и Винни</b></p>'.($p['status']==='published'?'<p><a href="'.h($url).'">🌐 Читать на сайте</a></p>':'').'</blockquote>';
     // Reject oversized messages before any network call; never truncate or split implicitly.
     if(mb_strlen(html_entity_decode(strip_tags($html),ENT_QUOTES|ENT_HTML5,'UTF-8'))>32768)throw new RuntimeException('Рассказ больше лимита одного составного сообщения Telegram (32768 символов). Сократи текст для канала.');

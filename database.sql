@@ -94,3 +94,7 @@ CREATE TABLE IF NOT EXISTS post_telegram_options (
  footer_mode TEXT NOT NULL DEFAULT 'auto' CHECK(footer_mode IN ('auto','on','off'))
 );
 INSERT OR IGNORE INTO schema_versions VALUES(9,datetime('now'));
+
+-- One-time launch, explicitly authorized by the author. Later manual opt-out persists.
+UPDATE settings SET value='1' WHERE key='indexed' AND NOT EXISTS (SELECT 1 FROM schema_versions WHERE version=10);
+INSERT OR IGNORE INTO schema_versions VALUES(10,datetime('now'));

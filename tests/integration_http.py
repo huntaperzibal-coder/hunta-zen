@@ -41,7 +41,7 @@ with tempfile.TemporaryDirectory(prefix='hunta-http-') as tmp:
             assert 'theme-label' not in public_head and 'theme-icon' not in public_head,'theme toggle has no visible text or emoji'
             for icon in ['sun','moon']:
                 code,svg,_=request('/assets/icons/'+icon+'.svg');assert code==200 and '<svg' in svg,'copied theme icon served'
-            assert '/assets/js/reader-theme.js?v=2' in public_head and '/assets/css/reader.css?v=12' in public_head,'theme assets cache refreshed'
+            assert '/assets/js/reader-theme.js?v=2' in public_head and '/assets/css/reader.css?v=13' in public_head,'theme assets cache refreshed'
             assert '/assets/brand/dialogue.svg?v=2' in public_head and '/assets/brand/dao-admin.svg' not in public_head,'separate site identity'
             for path,heading in [('/admin.php?view=settings','Настройки'),('/admin.php?view=telegram','Telegram'),('/admin.php?view=service','Обслуживание'),('/admin.php?view=github','GitHub и резервные копии')]:
                 code,panel,_=request(path);assert code==200 and heading in panel,'navigation '+path
@@ -282,6 +282,32 @@ with tempfile.TemporaryDirectory(prefix='hunta-http-') as tmp:
             request('/admin.php',footer_save)
             with sqlite3.connect(storage/'blog.sqlite') as records:assert records.execute('SELECT footer_mode FROM post_telegram_options WHERE post_id=?',[ids[1]]).fetchone()[0]=='off','older clients preserve stored footer choice'
 
+            # SEO public endpoints, private exclusions and canonical behavior.
+            with sqlite3.connect(storage/'blog.sqlite') as records:records.execute("UPDATE settings SET value='1' WHERE key='indexed'")
+            assert 'noindex' not in request('/')[1],'public HTML has no indexing prohibition after launch'
+            code,robots,_=request('/robots.php',opener=anonymous);assert code==200 and 'Sitemap: https://example.test/sitemap.xml' in robots and 'Disallow: /admin.php' in robots,'crawler rules expose sitemap and exclude admin'
+            code,sitemap,_=request('/sitemap.php',opener=anonymous);assert code==200 and 'site-hub' in sitemap and 'tg-hub' not in sitemap,'sitemap contains website posts but no Telegram-only drafts'
+            code,article,_=request('/?p=site-hub',opener=anonymous);assert code==200
+            assert 'href="https://example.test/?p=site-hub"' in article and 'application/ld+json' in article and 'BlogPosting' in article,'article canonical and structured data'
+            assert '<meta name="description" content="Текст">' in article,'article has content-derived description'
+            with sqlite3.connect(storage/'blog.sqlite') as records:
+                for n in range(11):records.execute("INSERT INTO posts(slug,title,body,status,published_at,created_at,updated_at) VALUES(?,?,?,'published',?,?,?)",('seo-page-'+str(n),'История '+str(n),'Текст истории','2026-10-18','2026-10-18','2026-10-18'))
+            code,page_two,_=request('/?page=2&utm_source=test',opener=anonymous);assert code==200 and '<link rel="canonical" href="https://example.test/?page=2">' in page_two and 'страница 2' in page_two,'real second page has its own HTTPS canonical and title'
+            with sqlite3.connect(storage/'blog.sqlite') as records:settings_values=dict(records.execute('SELECT key,value FROM settings'))
+            verification={key:settings_values.get(key,'') for key in ['title','description','telegram_url','support_url','support_text']}
+            verification.update({'action':'settings','csrf':csrf,'indexed':'1','google_verification':'<meta name="google-site-verification" content="google_test-code" />','yandex_verification':'abc123'})
+            assert request('/admin.php',verification)[0]==200,'verification codes save through authenticated CSRF form'
+            verified=request('/',opener=anonymous)[1]
+            assert '<meta name="google-site-verification" content="google_test-code">' in verified and '<meta name="yandex-verification" content="abc123">' in verified,'public head contains validated webmaster tokens'
+            code,missing,_=request('/?page=999',opener=anonymous);assert code==404,'empty pagination page is a true 404'
+            with sqlite3.connect(storage/'blog.sqlite') as records:records.execute("UPDATE settings SET value='0' WHERE key='indexed'")
+            assert request('/sitemap.php',opener=anonymous)[0]==404 and 'Disallow: /\n' in request('/robots.php',opener=anonymous)[1],'manual closure hides sitemap and disallows crawling'
+            with anonymous.open(base+'/') as response:assert 'noindex' in response.headers.get('X-Robots-Tag',''),'manual closure sends noindex HTTP header'
+            class NoRedirect(urllib.request.HTTPRedirectHandler):
+                def redirect_request(self,*args,**kwargs):return None
+            no_redirect=urllib.request.build_opener(NoRedirect)
+            code,_,_=request('/?p=site-hub',opener=no_redirect,headers={'Host':'example.test'})
+            assert code==301,'HTTP on configured host redirects to HTTPS before rendering'
             print('OK: HTTP login, CSRF, drafts, upload, private media, publishing, XSS, conflicts, backup')
         finally:
             server.terminate();server.wait(timeout=5)

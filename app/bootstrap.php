@@ -10,6 +10,8 @@ if (!is_file($configPath)) {
     exit('Мастерская ещё не настроена. Запусти tools/install.php через SSH.');
 }
 $config = require $configPath;
+require_once __DIR__.'/seo.php';
+seo_redirect();
 $storage = $config['storage'];
 if(is_file($storage.'/telegram-connection.php'))$config=array_replace($config,require $storage.'/telegram-connection.php');
 if (PHP_SAPI !== 'cli') {
