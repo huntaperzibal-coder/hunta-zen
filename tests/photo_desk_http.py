@@ -45,6 +45,14 @@ with tempfile.TemporaryDirectory(prefix='photo-desk-') as tmp:
         parts.append(f'--{boundary}--\r\n'.encode());code,body,_=req(owner,data=b''.join(parts),headers={'Content-Type':f'multipart/form-data; boundary={boundary}'})
         assert code==200,(code,body)
         assert db.execute('select count(*) from attachments').fetchone()[0]==2
+        # Miniature remains outside the folded body, with attachment fallback.
+        folded=req(owner,'?id=999')[1].decode()
+        assert 'class="case-thumb" href="?file=1"' in folded
+        assert folded.index('class="case-thumb"') < folded.index('class="case-body"')
+        preview_key=db.execute('select storage_key from attachments where id=1').fetchone()[0]
+        db.execute('update cases set preview_key=? where id=1',(preview_key,));db.commit()
+        assert 'class="case-thumb" href="?preview=1"' in req(owner,'?id=999')[1].decode()
+
         assert req(lawyer,'?file=1&download=1')[1]==png
         assert req(guest,'?file=1&thumb=1')[0]==403
         assert req(owner,'?file=1&thumb=1')[0]==200

@@ -99,6 +99,16 @@ function attachments(\PDO $db,int $id,string $side,bool $editable,array $row): v
         echo '</article>';
     }echo '</div>';
 }
+function summary_preview(\PDO $db,array $row): void {
+    $url='';
+    if($row['preview_key'])$url='?preview='.(int)$row['id'];
+    else{
+        $q=$db->prepare("SELECT id FROM attachments WHERE case_id=? AND mime IN ('image/jpeg','image/png','image/webp','image/gif') ORDER BY CASE side WHEN 'request' THEN 0 ELSE 1 END,id LIMIT 1");
+        $q->execute([(int)$row['id']]);$fileId=$q->fetchColumn();
+        if($fileId!==false)$url='?file='.(int)$fileId;
+    }
+    if($url!=='')echo '<a class="case-thumb" href="'.esc($url).'" data-image aria-label="Увеличить фото: '.esc($row['title']).'"><img loading="lazy" src="'.esc($url.'&thumb=1').'" alt="'.esc($row['title']).'"></a>';
+}
 function flag(array $row,string $key,string $label,bool $editable): void {
     echo '<form method="post" class="flag">'.form_context($row).'<input type="hidden" name="action" value="flag"><input type="hidden" name="flag" value="'.$key.'"><label><input type="checkbox" name="value" value="1" '.($row[$key]?'checked ':'').(!$editable?'disabled ':'').' data-flag> '.esc($label).'</label>'.($editable?'<button class="flag-save compact">Применить</button>':'').'</form>';
 }
@@ -124,7 +134,7 @@ foreach($rows as $n=>$row):$id=(int)$row['id'];$revision=$row['revision'];$editi
 $display=$row;if($editing)foreach(['title','company','request_note','response_note','source_url'] as $key)if(isset($draft[$key]))$display[$key]=$draft[$key];if($editing)$display['revision']=(int)($draft['revision']??0);
 $req=permitted($user['role'],'request');$resp=permitted($user['role'],'response');
 ?>
-<section class="case <?=$row['closed']?'closed':($row['ready']?'ready':'')?>" id="case-<?=$id?>"><div class="case-head"><button class="fold" aria-expanded="<?=($selected===$id||(!$selected&&$n===0)||$editing)?'true':'false'?>" aria-controls="body-<?=$id?>">⌄</button><a class="case-title" href="?<?=esc(http_build_query(['id'=>$id,'filter'=>$filter,'q'=>$search,'page'=>$page]))?>#case-<?=$id?>">№ <?=str_pad((string)$id,4,'0',STR_PAD_LEFT)?> · <?=esc($row['title'])?></a><span class="company"><?=esc($row['company'])?></span><small><?=esc(date('d.m.Y',strtotime($row['created_at'])))?></small><span class="badge"><?=$row['closed']?'Закрыта':($row['ready']?'Ответ готов · Открыта':'Без ответа')?></span><div class="flags"><?php flag($row,'ready','Фотограф: ответ готов',$resp);flag($row,'closed','Юрист: закрыто',$req);?></div></div>
+<section class="case <?=$row['closed']?'closed':($row['ready']?'ready':'')?>" id="case-<?=$id?>"><div class="case-head"><button class="fold" aria-expanded="<?=($selected===$id||(!$selected&&$n===0)||$editing)?'true':'false'?>" aria-controls="body-<?=$id?>">⌄</button><?php summary_preview($db,$row);?><a class="case-title" href="?<?=esc(http_build_query(['id'=>$id,'filter'=>$filter,'q'=>$search,'page'=>$page]))?>#case-<?=$id?>">№ <?=str_pad((string)$id,4,'0',STR_PAD_LEFT)?> · <?=esc($row['title'])?></a><span class="company"><?=esc($row['company'])?></span><small><?=esc(date('d.m.Y',strtotime($row['created_at'])))?></small><span class="badge"><?=$row['closed']?'Закрыта':($row['ready']?'Ответ готов · Открыта':'Без ответа')?></span><div class="flags"><?php flag($row,'ready','Фотограф: ответ готов',$resp);flag($row,'closed','Юрист: закрыто',$req);?></div></div>
 <div class="case-body" id="body-<?=$id?>" <?=($selected===$id||(!$selected&&$n===0)||$editing)?'':'hidden'?>>
 <section class="panel"><h2>Запрос юриста</h2>
 <?php if($row['source_url']):?><div class="source"><?php if($row['preview_key']):?><a class="image-link" data-image href="?preview=<?=$id?>"><img loading="lazy" src="?preview=<?=$id?>&amp;thumb=1" alt="Превью источника"></a><?php endif?><div><small><?=esc(parse_url($row['source_url'],PHP_URL_HOST))?></small><strong><?=esc($row['source_title']?:'Источник фотографии')?></strong><a href="<?=esc($row['source_url'])?>" target="_blank" rel="noopener noreferrer">Открыть источник ↗</a></div></div><?php if($req):?><form method="post" class="preview-form"><?=form_context($row)?><input type="hidden" name="action" value="preview"><button class="text-button">↻ Получить превью</button><details class="manual-preview"><summary>Указать картинку</summary><input type="url" name="preview_image_url" placeholder="HTTPS-ссылка на саму картинку" aria-label="Ссылка на картинку для превью"><button class="compact">Загрузить превью</button></details></form><?php endif?><?php endif?>
