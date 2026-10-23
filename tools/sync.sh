@@ -36,6 +36,7 @@ rebase_main() {
   fi
   if [[ -f "$config_path" ]]; then "$PHP_BIN" tools/migrate.php; fi
 }
+if [[ -f "$PWD/storage/photo-desk/config.php" ]]; then "$PHP_BIN" tools/photo_desk_snapshot.php; fi
 fetch_main
 rebase_main
 for push_attempt in 1 2 3; do

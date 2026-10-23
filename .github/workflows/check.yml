@@ -14,10 +14,14 @@ jobs:
           extensions: pdo_sqlite, mbstring, curl, fileinfo, dom, gd, exif
           coverage: none
           ini-values: opcache.enable_cli=1, opcache.jit=0
-      - run: find app public tools tests -name '*.php' -exec php -l {} \;
+      - run: find app public tools tests photo-desk -name '*.php' -exec php -l {} \;
       - run: php tests/reader_feedback.php
       - run: php tests/database_backup.php
       - run: php tests/seo.php
+      - run: php tests/photo_desk.php
+      - run: python3 tests/photo_desk_http.py
+      - run: python3 tests/photo_desk_install.py
+      - run: node --check photo-desk/public/desk.js
       - run: php tests/core.php
       - run: php tests/video.php
       - run: php tests/reader_images.php
