@@ -23,3 +23,26 @@ document.querySelectorAll('[data-image]').forEach(a=>a.addEventListener('click',
 viewer?.querySelector('button').addEventListener('click',()=>viewer.close());
 viewer?.addEventListener('click',e=>{if(e.target===viewer)viewer.close();});
 document.documentElement.classList.add('js');
+// Paste images and drop files into either side without hunting for a file picker.
+document.querySelectorAll('.case-body > .panel, .new').forEach(panel=>{
+  const form=panel.querySelector('form[data-upload]');
+  if(!form)return;
+  panel.tabIndex=0;
+  const input=form.querySelector('input[type=file]');
+  const accept=files=>{
+    if(!files.length)return;
+    const transfer=new DataTransfer();
+    for(const file of input.files)transfer.items.add(file);
+    for(const file of files)transfer.items.add(file);
+    if(transfer.files.length>12){alert('За один раз можно загрузить до 12 файлов.');return;}
+    const details=form.closest('details');if(details)details.open=true;
+    input.files=transfer.files;input.dispatchEvent(new Event('change',{bubbles:true}));dirty.add(form);
+  };
+  panel.addEventListener('paste',event=>{
+    const files=Array.from(event.clipboardData?.files||[]).filter(file=>file.type.startsWith('image/'));
+    if(files.length){event.preventDefault();accept(files);}
+  });
+  panel.addEventListener('dragover',event=>{if(Array.from(event.dataTransfer?.types||[]).includes('Files')){event.preventDefault();panel.classList.add('dragging');}});
+  panel.addEventListener('dragleave',event=>{if(!panel.contains(event.relatedTarget))panel.classList.remove('dragging');});
+  panel.addEventListener('drop',event=>{const files=Array.from(event.dataTransfer?.files||[]);panel.classList.remove('dragging');if(files.length){event.preventDefault();accept(files);}});
+});

@@ -18,4 +18,10 @@ rejects(fn()=>source_url('javascript:alert(1)'));rejects(fn()=>source_url('https
 save($db,$id,5,['response_note'=>'Ответ'],'photographer','owner',[['side'=>'response','name'=>'test.txt','mime'=>'text/plain','size'=>5,'storage_key'=>'test']]);
 rejects(fn()=>save($db,$id,6,[],'lawyer','lawyer',[],1));check((int)$db->query('SELECT count(*) FROM attachments')->fetchColumn()===1,'Foreign side attachment preserved');
 check(record($db,$id)['revision']===6,'Failed operation rolls back revision');
+check(PhotoDesk\resolve_url('https://example.org/a/b','../photo.jpg')==='https://example.org/photo.jpg','Relative redirect resolution');
+$meta=PhotoDesk\preview_metadata('<title>Photo</title><meta name="twitter:image" content="/photo.jpg">','https://example.org/a');
+check($meta['image']==='https://example.org/photo.jpg' && $meta['title']==='Photo','Twitter image fallback');
+rejects(fn()=>PhotoDesk\public_fetch('https://127.0.0.1/private',100));
+rejects(fn()=>PhotoDesk\public_fetch('http://example.org',100));
+rejects(fn()=>PhotoDesk\public_fetch('https://user:pass@example.org',100));
 $db=null;unlink($dir.'/desk.sqlite');rmdir($dir);echo "Photo desk domain checks passed\n";
