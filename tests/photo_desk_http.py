@@ -85,7 +85,11 @@ with tempfile.TemporaryDirectory(prefix='photo-desk-') as tmp:
             entries.append(struct.pack('<HHII',tag,2,len(value),offset));values+=value;offset+=len(value)
         tiff=b'II'+struct.pack('<HIH',42,8,len(tags))+b''.join(entries)+bytes(4)+values
         app1=b'Exif\0\0'+tiff;jpeg=jpeg[:2]+b'\xff\xe1'+struct.pack('>H',len(app1)+2)+app1+jpeg[2:]
-        raf=b'FUJIFILMCCD-RAW '+bytes(68)+struct.pack('>II',128,len(jpeg))+bytes(36)+jpeg+bytes(512)
+        native_tags=[(0x100,struct.pack('>HH',3296,4936)),(0x121,struct.pack('>HH',3264,4896)),(0x110,struct.pack('>HH',16,20)),(0x2ff0,struct.pack('>4H',1024,512,800,1024))]
+        native=struct.pack('>I',len(native_tags))+b''.join(struct.pack('>HH',tag,len(value))+value for tag,value in native_tags)
+        header=bytearray(128);header[:16]=b'FUJIFILMCCD-RAW ';header[16:20]=b'0201';header[28:32]=b'X-T1';header[60:64]=b'0100'
+        header[84:100]=struct.pack('>4I',128,len(jpeg),128+len(jpeg),len(native))
+        raf=bytes(header)+jpeg+native+bytes(512)
         assert upload_raw('20170510_0127.RAF',raf)[0]==200
         raw_id,raw_mime=db.execute("select id,mime from attachments where name='20170510_0127.RAF'").fetchone()
         assert raw_mime=='application/octet-stream'
@@ -111,7 +115,10 @@ with tempfile.TemporaryDirectory(prefix='photo-desk-') as tmp:
         meta=json.loads(body);values=[row['value'] for row in meta['rows']]
         assert 'FUJIFILM' in values and 'X-T2' in values and '2017:05:10 12:34:56' in values,meta
         assert 'Hunta <script>alert(1)</script>' in values
-        assert 'Встроенный JPEG из RAF' in values
+        assert '4936 × 3296' in values and '4896 × 3264' in values and 'X-T1' in values
+        assert any(row['group']=='RAF · исходный RAW' for row in meta['rows'])
+        assert any(row['group']=='EXIF внутри RAF · IFD0' for row in meta['rows'])
+        assert not any(row['label']=='Размер встроенного JPEG' for row in meta['rows'])
         assert str(store).encode() not in body and b'storage_key' not in body
         code,report,headers=req(photo,meta_url+'&download=1')
         assert code==200 and headers['Content-Type'].startswith('text/plain')
@@ -122,6 +129,18 @@ with tempfile.TemporaryDirectory(prefix='photo-desk-') as tmp:
         assert json.loads(req(owner,'?file=2&metadata=1')[1])['notice']
         page=req(owner)[1].decode();assert 'Посмотреть метаданные' in page and 'Скачать метаданные' in page
         assert req(owner,f'?file={raw_id}&download=1')[1]==raf
+        # Native metadata must remain available even if no JPEG can be extracted.
+        nojpeg=bytearray(raf);nojpeg[84:92]=bytes(8)
+        assert upload_raw('native-only.RAF',bytes(nojpeg))[0]==200
+        native_id=db.execute("select id from attachments where name='native-only.RAF'").fetchone()[0]
+        native_meta=json.loads(req(owner,f'?file={native_id}&metadata=1')[1])
+        assert '4936 × 3296' in [row['value'] for row in native_meta['rows']]
+        assert req(owner,f'?file={native_id}&download=1')[1]==bytes(nojpeg)
+        bad_dir=bytearray(raf);bad_dir[92:100]=struct.pack('>II',4294967295,4294967295)
+        assert upload_raw('bad-directory.RAF',bytes(bad_dir))[0]==200
+        bad_id=db.execute("select id from attachments where name='bad-directory.RAF'").fetchone()[0]
+        bad_meta=json.loads(req(owner,f'?file={bad_id}&metadata=1')[1])
+        assert 'неверные границы' in bad_meta['notice']
         assert upload_raw('camera.jpg',jpeg)[0]==200
         jpeg_id=db.execute("select id from attachments where name='camera.jpg'").fetchone()[0]
         jpeg_meta=json.loads(req(lawyer,f'?file={jpeg_id}&metadata=1')[1])
