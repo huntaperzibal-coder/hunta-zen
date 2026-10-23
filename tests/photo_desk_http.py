@@ -76,11 +76,28 @@ with tempfile.TemporaryDirectory(prefix='photo-desk-') as tmp:
             parts.append(f'--{boundary}\r\nContent-Disposition: form-data; name="response[]"; filename="{name}"\r\nContent-Type: application/octet-stream\r\n\r\n'.encode()+content+b'\r\n')
             parts.append(f'--{boundary}--\r\n'.encode())
             return req(owner,data=b''.join(parts),headers={'Content-Type':f'multipart/form-data; boundary={boundary}'})
-        raf=b'FUJIFILMCCD-RAW '+bytes(range(256))*8
+        import struct,io
+        from PIL import Image
+        jpeg_stream=io.BytesIO();Image.new('RGB',(40,30),'red').save(jpeg_stream,format='JPEG');jpeg=jpeg_stream.getvalue()
+        raf=b'FUJIFILMCCD-RAW '+bytes(68)+struct.pack('>II',128,len(jpeg))+bytes(36)+jpeg+bytes(512)
         assert upload_raw('20170510_0127.RAF',raf)[0]==200
         raw_id,raw_mime=db.execute("select id,mime from attachments where name='20170510_0127.RAF'").fetchone()
         assert raw_mime=='application/octet-stream'
         assert req(lawyer,f'?file={raw_id}&download=1')[1]==raf,'RAF original bytes preserved'
+        preview_url=f'?file={raw_id}&raw_preview=1'
+        code,content,headers=req(lawyer,preview_url)
+        assert code==200 and content==jpeg and headers['Content-Type']=='image/jpeg'
+        assert req(guest,preview_url)[0]==403
+        assert req(owner,preview_url+'&thumb=1')[0]==200
+        assert req(owner,preview_url+'&download=1')[1]==raf
+        assert f'href="?file={raw_id}&amp;raw_preview=1"' in req(owner)[1].decode()
+        db.execute('update cases set preview_key=NULL where id=1');db.execute('delete from attachments where id=1');db.commit()
+        assert f'class="case-thumb" href="?file={raw_id}&amp;raw_preview=1"' in req(owner)[1].decode()
+        broken=b'FUJIFILMCCD-RAW '+bytes(68)+struct.pack('>II',4294967295,4294967295)
+        assert upload_raw('broken.RAF',broken)[0]==200
+        broken_id=db.execute("select id from attachments where name='broken.RAF'").fetchone()[0]
+        assert req(owner,f'?file={broken_id}&raw_preview=1')[0]==404
+        assert req(owner,f'?file={broken_id}&download=1')[1]==broken
         assert upload_raw('not-a-camera.RAF',b'not a Fujifilm raw file')[0]==422
         assert db.execute("select count(*) from attachments where name='not-a-camera.RAF'").fetchone()[0]==0
         print('Photo desk HTTP checks passed')

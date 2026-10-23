@@ -164,3 +164,36 @@ function preview(string $url,string $storage,bool $directImage=false): array {
     }
     return ['title'=>$meta['title'],'key'=>$key];
 }
+
+/** Extract Fujifilm's embedded JPEG, never decode or modify the sensor data.
+ * RAF directory: big-endian JPEG offset/length at byte 84 (LibRaw identify.cpp).
+ */
+function raf_preview(array $file,string $storage): ?string {
+    if(strtolower(pathinfo($file['name'],PATHINFO_EXTENSION))!=='raf')return null;
+    $source=$storage.'/files/'.$file['storage_key'];
+    $cache=$storage.'/thumbs/'.basename($file['storage_key']).'.raf-v1.jpg';
+    if(is_file($cache))return $cache;
+    $handle=@fopen($source,'rb');if(!$handle)return null;
+    try{
+        $header=fread($handle,92);$size=fstat($handle)['size'];
+        if(strlen($header)!==92 || substr($header,0,16)!=='FUJIFILMCCD-RAW ')return null;
+        $dir=unpack('Noffset/Nlength',substr($header,84,8));
+        if($dir['offset']<92 || $dir['length']<4 || $dir['length']>16000000 || $dir['offset']>$size || $dir['length']>$size-$dir['offset'])return null;
+        if(fseek($handle,$dir['offset'])!==0)return null;
+        $jpeg=stream_get_contents($handle,$dir['length']);
+        if(strlen($jpeg)!==$dir['length'] || !str_starts_with($jpeg,"\xff\xd8"))return null;
+        $info=@getimagesizefromstring($jpeg);
+        if(!$info || $info[2]!==IMAGETYPE_JPEG || $info[0]*$info[1]>20000000)return null;
+        if(!is_dir($storage.'/thumbs') && !@mkdir($storage.'/thumbs',0700,true) && !is_dir($storage.'/thumbs'))return null;
+        $temp=$cache.'.'.bin2hex(random_bytes(6));
+        if(@file_put_contents($temp,$jpeg)!==strlen($jpeg)){@unlink($temp);return null;}
+        chmod($temp,0600);
+        if(!@rename($temp,$cache)){@unlink($temp);return null;}
+        return $cache;
+    }finally{fclose($handle);}
+}
+function attachment_preview_url(array $file,string $storage): string {
+    $url='?file='.(int)$file['id'];
+    if(in_array($file['mime'],['image/jpeg','image/png','image/webp','image/gif'],true))return $url;
+    return raf_preview($file,$storage)!==null?$url.'&raw_preview=1':'';
+}

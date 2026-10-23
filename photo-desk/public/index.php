@@ -88,6 +88,11 @@ if(isset($_GET['file']) || isset($_GET['preview'])){
     if(isset($_GET['file'])){$q=$db->prepare('SELECT * FROM attachments WHERE id=?');$q->execute([(int)$_GET['file']]);$file=$q->fetch();if($file){$path=$storage.'/files/'.$file['storage_key'];$mime=$file['mime'];$name=$file['name'];}}
     else{$row=record($db,(int)$_GET['preview']);if($row['preview_key']){$path=$storage.'/files/'.$row['preview_key'];$mime=(new \finfo(FILEINFO_MIME_TYPE))->file($path);}}
     if(!$path || !is_file($path)){http_response_code(404);exit('Файл не найден.');}
+    if(isset($_GET['file'],$_GET['raw_preview']) && !isset($_GET['download'])){
+        $previewPath=raf_preview($file,$storage);
+        if($previewPath===null){http_response_code(404);exit('Встроенное JPEG-превью отсутствует.');}
+        $path=$previewPath;$mime='image/jpeg';$name.='.jpg';
+    }
     $inline=!isset($_GET['download']) && in_array($mime,['image/jpeg','image/png','image/webp','image/gif'],true);
     if($inline && isset($_GET['thumb']) && extension_loaded('gd')){
         $cache=$storage.'/thumbs/'.basename($path).'.jpg';
@@ -100,23 +105,23 @@ function form_context(?array $row=null): string {
     $out=token();if($row)$out.='<input type="hidden" name="id" value="'.(int)$row['id'].'"><input type="hidden" name="revision" value="'.(int)$row['revision'].'">';
     foreach(['filter','q'] as $key)$out.='<input type="hidden" name="'.$key.'" value="'.esc($_GET[$key]??'').'">';return $out;
 }
-function attachments(\PDO $db,int $id,string $side,bool $editable,array $row): void {
+function attachments(\PDO $db,int $id,string $side,bool $editable,array $row,string $storage): void {
     $q=$db->prepare('SELECT * FROM attachments WHERE case_id=? AND side=? ORDER BY id');$q->execute([$id,$side]);echo '<div class="attachments">';
-    foreach($q as $file){$fid=(int)$file['id'];$image=in_array($file['mime'],['image/jpeg','image/png','image/webp','image/gif'],true);echo '<article class="attachment">';
-        if($image)echo '<a href="?file='.$fid.'" class="image-link" data-image><img loading="lazy" src="?file='.$fid.'&amp;thumb=1" alt="'.esc($file['name']).'"></a>';
+    foreach($q as $file){$fid=(int)$file['id'];$imageUrl=attachment_preview_url($file,$storage);echo '<article class="attachment">';
+        if($imageUrl!=='')echo '<a href="'.esc($imageUrl).'" class="image-link" data-image><img loading="lazy" src="'.esc($imageUrl.'&thumb=1').'" alt="'.esc($file['name']).'"></a>';
         else echo '<div class="file-icon">'.esc(strtoupper(pathinfo($file['name'],PATHINFO_EXTENSION))).'</div>';
         echo '<strong>'.esc($file['name']).'</strong><small>'.esc(round($file['size']/1048576,2)).' МБ</small><a class="button compact" href="?file='.$fid.'&amp;download=1">Скачать ↓</a>';
         if($editable)echo '<form method="post">'.form_context($row).'<input type="hidden" name="action" value="delete"><input type="hidden" name="attachment" value="'.$fid.'"><button class="text-button remove" data-confirm="Убрать вложение из карточки?">Убрать</button></form>';
         echo '</article>';
     }echo '</div>';
 }
-function summary_preview(\PDO $db,array $row): void {
+function summary_preview(\PDO $db,array $row,string $storage): void {
     $url='';
     if($row['preview_key'])$url='?preview='.(int)$row['id'];
     else{
-        $q=$db->prepare("SELECT id FROM attachments WHERE case_id=? AND mime IN ('image/jpeg','image/png','image/webp','image/gif') ORDER BY CASE side WHEN 'request' THEN 0 ELSE 1 END,id LIMIT 1");
-        $q->execute([(int)$row['id']]);$fileId=$q->fetchColumn();
-        if($fileId!==false)$url='?file='.(int)$fileId;
+        $q=$db->prepare("SELECT * FROM attachments WHERE case_id=? ORDER BY CASE side WHEN 'request' THEN 0 ELSE 1 END,id");
+        $q->execute([(int)$row['id']]);
+        foreach($q as $file){$url=attachment_preview_url($file,$storage);if($url!=='')break;}
     }
     if($url!=='')echo '<a class="case-thumb" href="'.esc($url).'" data-image aria-label="Увеличить фото: '.esc($row['title']).'"><img loading="lazy" src="'.esc($url.'&thumb=1').'" alt="'.esc($row['title']).'"></a>';
 }
@@ -149,14 +154,14 @@ foreach($rows as $n=>$row):$id=(int)$row['id'];$revision=$row['revision'];$editi
 $display=$row;if($editing)foreach(['title','company','request_note','response_note','source_url'] as $key)if(isset($draft[$key]))$display[$key]=$draft[$key];if($editing)$display['revision']=(int)($draft['revision']??0);
 $req=permitted($user['role'],'request');$resp=permitted($user['role'],'response');
 ?>
-<section class="case <?=$row['closed']?'closed':($row['ready']?'ready':'')?>" id="case-<?=$id?>"><div class="case-head"><button class="fold" aria-expanded="<?=($selected===$id||(!$selected&&$n===0)||$editing)?'true':'false'?>" aria-controls="body-<?=$id?>">⌄</button><?php summary_preview($db,$row);?><a class="case-title" href="?<?=esc(http_build_query(['id'=>$id,'filter'=>$filter,'q'=>$search,'page'=>$page]))?>#case-<?=$id?>">№ <?=str_pad((string)$id,4,'0',STR_PAD_LEFT)?> · <?=esc($row['title'])?></a><span class="company"><?=esc($row['company'])?></span><small><?=esc(date('d.m.Y',strtotime($row['created_at'])))?></small><span class="badge"><?=$row['closed']?'Закрыта':($row['ready']?'Ответ готов · Открыта':'Без ответа')?></span><div class="flags"><?php flag($row,'ready','Фотограф: ответ готов',$resp);flag($row,'closed','Юрист: закрыто',$req);?></div></div>
+<section class="case <?=$row['closed']?'closed':($row['ready']?'ready':'')?>" id="case-<?=$id?>"><div class="case-head"><button class="fold" aria-expanded="<?=($selected===$id||(!$selected&&$n===0)||$editing)?'true':'false'?>" aria-controls="body-<?=$id?>">⌄</button><?php summary_preview($db,$row,$storage);?><a class="case-title" href="?<?=esc(http_build_query(['id'=>$id,'filter'=>$filter,'q'=>$search,'page'=>$page]))?>#case-<?=$id?>">№ <?=str_pad((string)$id,4,'0',STR_PAD_LEFT)?> · <?=esc($row['title'])?></a><span class="company"><?=esc($row['company'])?></span><small><?=esc(date('d.m.Y',strtotime($row['created_at'])))?></small><span class="badge"><?=$row['closed']?'Закрыта':($row['ready']?'Ответ готов · Открыта':'Без ответа')?></span><div class="flags"><?php flag($row,'ready','Фотограф: ответ готов',$resp);flag($row,'closed','Юрист: закрыто',$req);?></div></div>
 <div class="case-body" id="body-<?=$id?>" <?=($selected===$id||(!$selected&&$n===0)||$editing)?'':'hidden'?>>
 <section class="panel"><h2>Запрос юриста</h2>
 <?php if($row['source_url']):?><div class="source"><?php if($row['preview_key']):?><a class="image-link" data-image href="?preview=<?=$id?>"><img loading="lazy" src="?preview=<?=$id?>&amp;thumb=1" alt="Превью источника"></a><?php endif?><div><small><?=esc(parse_url($row['source_url'],PHP_URL_HOST))?></small><strong><?=esc($row['source_title']?:'Источник фотографии')?></strong><a href="<?=esc($row['source_url'])?>" target="_blank" rel="noopener noreferrer">Открыть источник ↗</a></div></div><?php if($req):?><form method="post" class="preview-form"><?=form_context($row)?><input type="hidden" name="action" value="preview"><button class="text-button">↻ Получить превью</button><details class="manual-preview"><summary>Указать картинку</summary><input type="url" name="preview_image_url" placeholder="HTTPS-ссылка на саму картинку" aria-label="Ссылка на картинку для превью"><button class="compact">Загрузить превью</button></details></form><?php endif?><?php endif?>
-<?php attachments($db,$id,'request',$req,$row);?>
+<?php attachments($db,$id,'request',$req,$row,$storage);?>
 <?php if($req && !$row['preview_key']):?><p class="preview-hint">Нет картинки? Скопируй фото и вставь Ctrl+V в «Изменить запрос» или прикрепи файл.</p><?php endif?>
 <?php if($req):?><?php if($display['request_note']!==''):?><p class="note"><?=nl2br(esc($display['request_note']))?></p><?php endif?><details class="edit-request" <?=($editing?'open':'')?>><summary>✎ Изменить запрос · добавить фото</summary><form method="post" enctype="multipart/form-data" data-upload><?=form_context($display)?><input type="hidden" name="action" value="save"><div class="fields"><label>Название<input name="title" maxlength="200" value="<?=esc($display['title'])?>" required></label><label>Компания<input name="company" maxlength="300" value="<?=esc($display['company'])?>"></label></div><label>Ссылка<input type="url" name="source_url" value="<?=esc($display['source_url'])?>"></label><label>Запрос<textarea name="request_note" maxlength="20000"><?=esc($display['request_note'])?></textarea></label><label class="upload">＋ Файлы · можно вставить фото Ctrl+V<input type="file" name="request[]" multiple></label><div class="local-previews"></div><button class="button">Сохранить запрос</button></form></details><?php else:?><p class="note"><?=nl2br(esc($row['request_note']))?></p><?php endif?></section>
-<section class="panel"><h2>Ответ фотографа</h2><?php attachments($db,$id,'response',$resp,$row);?>
+<section class="panel"><h2>Ответ фотографа</h2><?php attachments($db,$id,'response',$resp,$row,$storage);?>
 <?php if($resp):?><form method="post" enctype="multipart/form-data" data-upload><?=form_context($display)?><input type="hidden" name="action" value="save"><label class="upload">＋ Файлы · можно вставить фото Ctrl+V<input type="file" name="response[]" multiple></label><div class="local-previews"></div><label>Заметка<textarea name="response_note" maxlength="20000" placeholder="Пояснение к ответу…"><?=esc($display['response_note'])?></textarea></label><button class="primary">Сохранить ответ</button></form><?php else:?><p class="note"><?=nl2br(esc($row['response_note']?:'Ответ пока не добавлен.'))?></p><?php endif?></section>
 <details class="history"><summary>История изменений · Обновлено <?=esc(date('d.m.Y H:i',strtotime($row['updated_at'])))?></summary><?php $events=$db->prepare('SELECT * FROM events WHERE case_id=? ORDER BY id DESC LIMIT 50');$events->execute([$id]);foreach($events as $event):?><p><?=esc(date('d.m H:i',strtotime($event['created_at'])))?> · <?=esc($event['actor'])?> · <?=esc($event['action'])?></p><?php endforeach?></details>
 </div></section>
