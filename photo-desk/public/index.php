@@ -5,7 +5,7 @@ require dirname(__DIR__).'/app.php';
 header('X-Robots-Tag: noindex, nofollow, noarchive');header('X-Content-Type-Options: nosniff');header('Referrer-Policy: same-origin');header('Cache-Control: no-store');
 header("Content-Security-Policy: default-src 'self'; img-src 'self' blob:; script-src 'self'; style-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'");
 if(isset($_GET['asset'])){
-    $assets=['style.css'=>'text/css; charset=utf-8','desk.js'=>'text/javascript; charset=utf-8'];$a=(string)$_GET['asset'];if(!isset($assets[$a])){http_response_code(404);exit;}header('Content-Type: '.$assets[$a]);readfile(__DIR__.'/'.$a);exit;
+    $assets=['favicon.svg'=>'image/svg+xml; charset=utf-8','style.css'=>'text/css; charset=utf-8','desk.js'=>'text/javascript; charset=utf-8'];$a=(string)$_GET['asset'];if(!isset($assets[$a])){http_response_code(404);exit;}header('Content-Type: '.$assets[$a]);readfile(__DIR__.'/'.$a);exit;
 }
 $configPath=getenv('PHOTO_DESK_CONFIG')?:dirname(__DIR__,2).'/storage/photo-desk/config.php';
 if(!is_file($configPath)){http_response_code(503);exit('Кабинет ещё не установлен. Запусти tools/photo_desk_install.php через SSH.');}
@@ -112,7 +112,7 @@ function summary_preview(\PDO $db,array $row): void {
 function flag(array $row,string $key,string $label,bool $editable): void {
     echo '<form method="post" class="flag">'.form_context($row).'<input type="hidden" name="action" value="flag"><input type="hidden" name="flag" value="'.$key.'"><label><input type="checkbox" name="value" value="1" '.($row[$key]?'checked ':'').(!$editable?'disabled ':'').' data-flag> '.esc($label).'</label>'.($editable?'<button class="flag-save compact">Применить</button>':'').'</form>';
 }
-?><!doctype html><html lang="ru"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex,nofollow"><title>Запросы по фотографиям</title><link rel="stylesheet" href="?asset=style.css"><script defer src="?asset=desk.js"></script></head><body>
+?><!doctype html><html lang="ru"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex,nofollow"><title>Запросы по фотографиям</title><link rel="icon" type="image/svg+xml" sizes="any" href="/?asset=favicon.svg&amp;v=1"><link rel="stylesheet" href="?asset=style.css"><script defer src="?asset=desk.js"></script></head><body>
 <header class="top"><span>▣ &nbsp; Кабинет фотографа и юриста</span><?php if($user):?><div><?=esc(['admin'=>'Режим разработки','lawyer'=>'Юрист','photographer'=>'Фотограф'][$user['role']])?> · <?=esc($user['login'])?> <form method="post"><?=token()?><button name="action" value="logout" class="text-button">Выйти ↗</button></form></div><?php endif?></header>
 <main><h1>Запросы по фотографиям</h1>
 <?php if($err):?><div class="notice error" role="alert"><?=esc($err)?><?php if($draft):?><p>Текст оставлен в форме. Файлы нужно выбрать повторно. При конфликте сначала скопируй текст, затем обнови страницу.</p><?php endif?></div><?php endif?>
