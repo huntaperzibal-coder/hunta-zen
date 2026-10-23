@@ -197,3 +197,5 @@ function attachment_preview_url(array $file,string $storage): string {
     if(in_array($file['mime'],['image/jpeg','image/png','image/webp','image/gif'],true))return $url;
     return raf_preview($file,$storage)!==null?$url.'&raw_preview=1':'';
 }
+
+require_once __DIR__.'/metadata.php';

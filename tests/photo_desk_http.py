@@ -76,9 +76,15 @@ with tempfile.TemporaryDirectory(prefix='photo-desk-') as tmp:
             parts.append(f'--{boundary}\r\nContent-Disposition: form-data; name="response[]"; filename="{name}"\r\nContent-Type: application/octet-stream\r\n\r\n'.encode()+content+b'\r\n')
             parts.append(f'--{boundary}--\r\n'.encode())
             return req(owner,data=b''.join(parts),headers={'Content-Type':f'multipart/form-data; boundary={boundary}'})
-        import struct,io
-        from PIL import Image
-        jpeg_stream=io.BytesIO();Image.new('RGB',(40,30),'red').save(jpeg_stream,format='JPEG');jpeg=jpeg_stream.getvalue()
+        import struct
+        jpeg=subprocess.check_output(['php','-r','$im=imagecreatetruecolor(40,30);imagejpeg($im);'])
+        # A real EXIF APP1/TIFF directory, embedded in both JPEG and RAF fixtures.
+        tags=[(271,b'FUJIFILM\0'),(272,b'X-T2\0'),(315,b'Hunta <script>alert(1)</script>\0'),(306,b'2017:05:10 12:34:56\0')]
+        offset=8+2+12*len(tags)+4;entries=[];values=b''
+        for tag,value in tags:
+            entries.append(struct.pack('<HHII',tag,2,len(value),offset));values+=value;offset+=len(value)
+        tiff=b'II'+struct.pack('<HIH',42,8,len(tags))+b''.join(entries)+bytes(4)+values
+        app1=b'Exif\0\0'+tiff;jpeg=jpeg[:2]+b'\xff\xe1'+struct.pack('>H',len(app1)+2)+app1+jpeg[2:]
         raf=b'FUJIFILMCCD-RAW '+bytes(68)+struct.pack('>II',128,len(jpeg))+bytes(36)+jpeg+bytes(512)
         assert upload_raw('20170510_0127.RAF',raf)[0]==200
         raw_id,raw_mime=db.execute("select id,mime from attachments where name='20170510_0127.RAF'").fetchone()
@@ -98,6 +104,30 @@ with tempfile.TemporaryDirectory(prefix='photo-desk-') as tmp:
         broken_id=db.execute("select id from attachments where name='broken.RAF'").fetchone()[0]
         assert req(owner,f'?file={broken_id}&raw_preview=1')[0]==404
         assert req(owner,f'?file={broken_id}&download=1')[1]==broken
+        meta_url=f'?file={raw_id}&metadata=1'
+        assert req(guest,meta_url)[0]==403
+        assert req(guest,meta_url+'&download=1')[0]==403
+        code,body,headers=req(lawyer,meta_url);assert code==200
+        meta=json.loads(body);values=[row['value'] for row in meta['rows']]
+        assert 'FUJIFILM' in values and 'X-T2' in values and '2017:05:10 12:34:56' in values,meta
+        assert 'Hunta <script>alert(1)</script>' in values
+        assert 'Встроенный JPEG из RAF' in values
+        assert str(store).encode() not in body and b'storage_key' not in body
+        code,report,headers=req(photo,meta_url+'&download=1')
+        assert code==200 and headers['Content-Type'].startswith('text/plain')
+        assert 'attachment' in headers['Content-Disposition'] and report.startswith(b'\xef\xbb\xbf')
+        assert 'Камера [Model]: X-T2'.encode() in report
+        assert req(owner,'?file=999999&metadata=1')[0]==404
+        assert req(owner,f'?file={broken_id}&metadata=1')[0]==200
+        assert json.loads(req(owner,'?file=2&metadata=1')[1])['notice']
+        page=req(owner)[1].decode();assert 'Посмотреть метаданные' in page and 'Скачать метаданные' in page
+        assert req(owner,f'?file={raw_id}&download=1')[1]==raf
+        assert upload_raw('camera.jpg',jpeg)[0]==200
+        jpeg_id=db.execute("select id from attachments where name='camera.jpg'").fetchone()[0]
+        jpeg_meta=json.loads(req(lawyer,f'?file={jpeg_id}&metadata=1')[1])
+        assert 'X-T2' in [row['value'] for row in jpeg_meta['rows']]
+        assert 'Загруженный оригинал' in [row['value'] for row in jpeg_meta['rows']]
+        assert req(lawyer,f'?file={jpeg_id}&download=1')[1]==jpeg
         assert upload_raw('not-a-camera.RAF',b'not a Fujifilm raw file')[0]==422
         assert db.execute("select count(*) from attachments where name='not-a-camera.RAF'").fetchone()[0]==0
         print('Photo desk HTTP checks passed')

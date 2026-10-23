@@ -46,3 +46,26 @@ document.querySelectorAll('.case-body > .panel, .new').forEach(panel=>{
   panel.addEventListener('dragleave',event=>{if(!panel.contains(event.relatedTarget))panel.classList.remove('dragging');});
   panel.addEventListener('drop',event=>{const files=Array.from(event.dataTransfer?.files||[]);panel.classList.remove('dragging');if(files.length){event.preventDefault();accept(files);}});
 });
+
+const metadataViewer=document.getElementById('metadata-view');
+let metadataRequest;
+document.querySelectorAll('[data-metadata]').forEach(link=>link.addEventListener('click',async event=>{
+  if(!metadataViewer?.showModal)return;
+  event.preventDefault();metadataRequest?.abort();metadataRequest=new AbortController();
+  const signal=metadataRequest.signal, body=metadataViewer.querySelector('tbody'), notice=metadataViewer.querySelector('[data-metadata-notice]');
+  body.replaceChildren();metadataViewer.querySelector('[data-metadata-name]').textContent='';notice.textContent='Читаем метаданные…';
+  metadataViewer.querySelector('[data-metadata-download]').href=link.href+'&download=1';metadataViewer.showModal();
+  try{
+    const response=await fetch(link.href,{signal,headers:{Accept:'application/json'}});
+    if(!response.ok)throw new Error();const data=await response.json();if(signal.aborted)return;
+    metadataViewer.querySelector('[data-metadata-name]').textContent=data.name;notice.textContent=data.notice;
+    let group='';
+    for(const row of data.rows){
+      if(row.group!==group){group=row.group;const tr=document.createElement('tr'),th=document.createElement('th');th.colSpan=2;th.textContent=group;tr.className='metadata-group';tr.append(th);body.append(tr);}
+      const tr=document.createElement('tr'),th=document.createElement('th'),td=document.createElement('td');th.scope='row';th.textContent=row.label;td.textContent=row.value;tr.append(th,td);body.append(tr);
+    }
+  }catch(error){if(error.name!=='AbortError')notice.textContent='Не удалось прочитать метаданные. Обновите страницу и попробуйте снова.';}
+}));
+metadataViewer?.querySelector('button').addEventListener('click',()=>metadataViewer.close());
+metadataViewer?.addEventListener('click',event=>{if(event.target===metadataViewer)metadataViewer.close();});
+metadataViewer?.addEventListener('close',()=>metadataRequest?.abort());

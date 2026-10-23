@@ -88,6 +88,15 @@ if(isset($_GET['file']) || isset($_GET['preview'])){
     if(isset($_GET['file'])){$q=$db->prepare('SELECT * FROM attachments WHERE id=?');$q->execute([(int)$_GET['file']]);$file=$q->fetch();if($file){$path=$storage.'/files/'.$file['storage_key'];$mime=$file['mime'];$name=$file['name'];}}
     else{$row=record($db,(int)$_GET['preview']);if($row['preview_key']){$path=$storage.'/files/'.$row['preview_key'];$mime=(new \finfo(FILEINFO_MIME_TYPE))->file($path);}}
     if(!$path || !is_file($path)){http_response_code(404);exit('Файл не найден.');}
+    if(isset($_GET['metadata'])){
+        if(!isset($_GET['file']) || !$file){http_response_code(404);exit('Файл не найден.');}
+        $metadata=photo_metadata($file,$storage);session_write_close();
+        if(isset($_GET['download'])){
+            $body=metadata_download($metadata);header('Content-Type: text/plain; charset=UTF-8');
+            header("Content-Disposition: attachment; filename=metadata.txt; filename*=UTF-8''".rawurlencode($file['name'].'.metadata.txt'));
+        }else{$body=json_encode($metadata,JSON_UNESCAPED_UNICODE|JSON_INVALID_UTF8_SUBSTITUTE);header('Content-Type: application/json; charset=UTF-8');}
+        header('Content-Length: '.strlen($body));echo $body;exit;
+    }
     if(isset($_GET['file'],$_GET['raw_preview']) && !isset($_GET['download'])){
         $previewPath=raf_preview($file,$storage);
         if($previewPath===null){http_response_code(404);exit('Встроенное JPEG-превью отсутствует.');}
@@ -111,6 +120,9 @@ function attachments(\PDO $db,int $id,string $side,bool $editable,array $row,str
         if($imageUrl!=='')echo '<a href="'.esc($imageUrl).'" class="image-link" data-image><img loading="lazy" src="'.esc($imageUrl.'&thumb=1').'" alt="'.esc($file['name']).'"></a>';
         else echo '<div class="file-icon">'.esc(strtoupper(pathinfo($file['name'],PATHINFO_EXTENSION))).'</div>';
         echo '<strong>'.esc($file['name']).'</strong><small>'.esc(round($file['size']/1048576,2)).' МБ</small><a class="button compact" href="?file='.$fid.'&amp;download=1">Скачать ↓</a>';
+        if($imageUrl!=='' || str_starts_with($file['mime'],'image/') || in_array(strtolower(pathinfo($file['name'],PATHINFO_EXTENSION)),['raw','raf','cr2','cr3','nef','arw','dng'],true)){
+            echo '<a class="metadata-link" href="?file='.$fid.'&amp;metadata=1" data-metadata>Посмотреть метаданные</a><a class="metadata-link" href="?file='.$fid.'&amp;metadata=1&amp;download=1">Скачать метаданные ↓</a>';
+        }
         if($editable)echo '<form method="post">'.form_context($row).'<input type="hidden" name="action" value="delete"><input type="hidden" name="attachment" value="'.$fid.'"><button class="text-button remove" data-confirm="Убрать вложение из карточки?">Убрать</button></form>';
         echo '</article>';
     }echo '</div>';
@@ -167,4 +179,4 @@ $req=permitted($user['role'],'request');$resp=permitted($user['role'],'response'
 </div></section>
 <?php endforeach?>
 <nav class="pagination" aria-label="Страницы"><?php if($page>1):?><a class="button" href="?<?=esc(http_build_query(['filter'=>$filter,'q'=>$search,'page'=>$page-1]))?>">← Назад</a><?php endif?><span>Найдено: <?=$total?> · Страница <?=$page?> из <?=$pages?></span><?php if($page<$pages):?><a class="button" href="?<?=esc(http_build_query(['filter'=>$filter,'q'=>$search,'page'=>$page+1]))?>">Далее →</a><?php endif?></nav>
-<?php endif?></main><dialog id="image-view"><button type="button" class="close-view" aria-label="Закрыть">✕</button><img alt="Увеличенное изображение"><a class="button" href="" download>Скачать оригинал ↓</a></dialog></body></html>
+<?php endif?></main><dialog id="image-view"><button type="button" class="close-view" aria-label="Закрыть">✕</button><img alt="Увеличенное изображение"><a class="button" href="" download>Скачать оригинал ↓</a></dialog><dialog id="metadata-view" aria-labelledby="metadata-title"><button type="button" class="close-view" aria-label="Закрыть">✕</button><h2 id="metadata-title">Метаданные фотографии</h2><p data-metadata-name></p><p data-metadata-notice role="status"></p><div class="metadata-scroll"><table><tbody></tbody></table></div><a class="button" data-metadata-download href="#">Скачать в TXT ↓</a></dialog></body></html>
