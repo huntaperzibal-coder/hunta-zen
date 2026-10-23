@@ -30,6 +30,8 @@ jobs:
       - run: php tests/telegram_channels.php
       - run: php tests/telegram.php
       - run: php tests/auth.php
+      - run: php tests/access_accounts.php
+      - run: python3 tests/access_accounts_http.py
       - run: php tests/rich_text.php
       - run: php tests/categories.php
       - run: php tests/illustrator.php

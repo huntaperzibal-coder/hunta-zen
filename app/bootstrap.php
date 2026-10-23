@@ -42,6 +42,7 @@ require_once __DIR__ . '/rich_text.php';
 require_once __DIR__ . '/video.php';
 require_once __DIR__ . '/reader_images.php';
 require_once __DIR__ . '/categories.php';
+require_once __DIR__ . '/access_accounts.php';
 require_once __DIR__ . '/orda_auth.php';
 require_once __DIR__ . '/dao_brand.php';
 require_once __DIR__ . '/reader_services.php';

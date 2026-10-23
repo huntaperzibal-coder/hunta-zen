@@ -112,3 +112,11 @@ INSERT OR IGNORE INTO telegram_message_meta(post_id,channel,format,linked_at)
  SELECT post_id,channel,'media',updated_at FROM telegram_deliveries
  WHERE message_id IS NOT NULL AND (error LIKE '%there is no text in the message to edit%' OR error LIKE 'Привязан медиапост.%');
 INSERT OR IGNORE INTO schema_versions VALUES(11,datetime('now'));
+
+CREATE TABLE IF NOT EXISTS orda_user_access (
+ login TEXT PRIMARY KEY REFERENCES orda_users(login), role TEXT NOT NULL DEFAULT 'owner',
+ active INTEGER NOT NULL DEFAULT 1 CHECK(active IN (0,1)),
+ session_version INTEGER NOT NULL DEFAULT 1, revision INTEGER NOT NULL DEFAULT 1
+);
+INSERT OR IGNORE INTO orda_user_access(login,role) SELECT login,'owner' FROM orda_users;
+INSERT OR IGNORE INTO schema_versions VALUES(12,datetime('now'));

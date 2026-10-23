@@ -5,6 +5,7 @@ header('Cache-Control: no-store'); header('X-Robots-Tag: noindex, nofollow');
 session_open();
 $action=(string)($_POST['action']??''); $view=(string)($_GET['view']??'list'); $error=''; $unsaved=null; $savedRevision=null;
 if($action==='author_settings')$view='author';
+if(str_starts_with($action,'access_'))$view='users';
 $telegramInline=in_array($action,['telegram_schedule','telegram_cancel'],true) && ($_POST['telegram_inline']??'')==='1';
 if ($_SERVER['REQUEST_METHOD']==='POST') {
     verify_csrf();
@@ -14,7 +15,7 @@ if ($_SERVER['REQUEST_METHOD']==='POST') {
         $wait=max(ordaThrottleBlockedSeconds('login_ip',$ip),ordaThrottleBlockedSeconds('login_user',$loginKey));
         $user=ordaFindUser($login);
         if ($wait>0) $error='Слишком много неудачных попыток. Попробуй через '.(int)ceil($wait/60).' мин.';
-        elseif ($user && password_verify(trim((string)($_POST['password']??'')),$user['password_hash'])) {
+        elseif ($user && (blog_access($user['login'])['active']??false) && password_verify(trim((string)($_POST['password']??'')),$user['password_hash'])) {
             ordaThrottleClear('login_user',$loginKey);ordaLoginSession($user['login'],$user['password_hash']);audit('login');redirect('/admin.php');
         } else {
             ordaThrottleFail('login_ip',$ip);ordaThrottleFail('login_user',$loginKey);$error='Неверный логин или пароль';
@@ -23,6 +24,11 @@ if ($_SERVER['REQUEST_METHOD']==='POST') {
     } else {
         guard();
         try {
+            if(str_starts_with($action,'access_')){
+                $own=blog_accounts()->mutate((string)$_SESSION['user_login'],$action,$_POST);
+                if($own){$_SESSION=[];session_destroy();redirect('/admin.php?view=login&'.($action==='access_password'?'password_changed':'sessions_closed').'=1');}
+                redirect('/admin.php?view=users&saved=1');
+            }
             $needsDestination=in_array($action,['telegram','telegram_schedule','telegram_cancel','telegram_bind','resolve'],true)||($action==='post_manage'&&($_POST['command']??'')==='telegram_delete');
             if($needsDestination&&count(telegram_channels())>1&&empty($_POST['telegram_destination']))throw new RuntimeException('Открой редактор заново и выбери канал перед действием.');
             if(isset($_POST['telegram_destination'])&&$_POST['telegram_destination']!=='')telegram_select_channel((string)$_POST['telegram_destination']);
@@ -147,8 +153,12 @@ if ($error && $view!=='author') echo '<div class="auth-error" role="alert">'.h($
 if(isset($_GET['managed']))echo '<div class="auth-success" role="status">Действие выполнено.</div>';
 if (isset($_GET['saved']) && $view!=='author' && $error==='' && $_SERVER['REQUEST_METHOD']==='GET') echo '<div class="auth-success">'.($view==='edit'?'Текст сохранён в базе сайта. Статус Telegram — в блоке ниже.':'Сохранено.').'</div>';
 if ($view==='login') {
+    if(isset($_GET['sessions_closed']))echo '<p class="auth-success">Все сеансы завершены. Войди заново.</p>';
+    if(isset($_GET['password_changed']))echo '<p class="auth-success">Пароль изменён. Войди с новым паролем.</p>';
     echo '<div class="auth-title">'.dao_icon('logo').'<span>Дао</span><small>'.h(setting('title')).'</small></div><form method="post">'.csrf().'<input type="hidden" name="action" value="login"><label class="sr-only" for="login">Логин</label><input type="text" id="login" class="auth-input" name="login" placeholder="Логин" autocomplete="username" required><div class="password-wrap"><label class="sr-only" for="password">Пароль</label><input id="password" class="auth-input" type="password" name="password" placeholder="Пароль" autocomplete="current-password" required><button type="button" class="pass-toggle" aria-label="Показать пароль" aria-pressed="false">'.dao_icon('eye').'</button></div><button type="submit" class="auth-btn">Войти</button></form>';
 
+} elseif ($view==='users') {
+    \HuntaAccess\render(blog_accounts(),(string)$_SESSION['user_login'],csrf());
 } elseif ($view==='edit' || $view==='preview') {
     try { $p=post((int)($_GET['id']??0)); } catch (Throwable $e) { http_response_code(404); echo '<h1>Запись не найдена</h1>';page_end();exit; }
     if ($view==='preview') {

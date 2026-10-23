@@ -22,7 +22,8 @@ function authenticated(): bool {
     $login=trim((string)($_SESSION['user_login']??''));
     if (empty($_SESSION['user_id']) || $login==='') return false;
     $user=ordaFindUser($login);
-    if (!$user || !isset($_SESSION['orda_pw_fp']) || !hash_equals(ordaGuardPasswordFingerprint($user['password_hash']),(string)$_SESSION['orda_pw_fp'])) {
+    $access=blog_access($login);
+    if (!$access || !$access['active'] || (int)($_SESSION['orda_session_version']??1)!==(int)$access['session_version'] || !$user || !isset($_SESSION['orda_pw_fp']) || !hash_equals(ordaGuardPasswordFingerprint($user['password_hash']),(string)$_SESSION['orda_pw_fp'])) {
         unset($_SESSION['user_id'],$_SESSION['user_login'],$_SESSION['orda_pw_fp']);return false;
     }
     return true;

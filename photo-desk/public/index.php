@@ -2,10 +2,12 @@
 declare(strict_types=1);
 namespace PhotoDesk;
 require dirname(__DIR__).'/app.php';
+require_once dirname(__DIR__,2).'/app/access_accounts.php';
+require_once dirname(__DIR__,2).'/tools/photo_desk_snapshot.php';
 header('X-Robots-Tag: noindex, nofollow, noarchive');header('X-Content-Type-Options: nosniff');header('Referrer-Policy: same-origin');header('Cache-Control: no-store');
 header("Content-Security-Policy: default-src 'self'; img-src 'self' blob:; script-src 'self'; style-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'");
 if(isset($_GET['asset'])){
-    $assets=['favicon.svg'=>'image/svg+xml; charset=utf-8','style.css'=>'text/css; charset=utf-8','desk.js'=>'text/javascript; charset=utf-8'];$a=(string)$_GET['asset'];if(!isset($assets[$a])){http_response_code(404);exit;}header('Content-Type: '.$assets[$a]);readfile(__DIR__.'/'.$a);exit;
+    $assets=['access.css'=>'text/css; charset=utf-8','favicon.svg'=>'image/svg+xml; charset=utf-8','style.css'=>'text/css; charset=utf-8','desk.js'=>'text/javascript; charset=utf-8'];$a=(string)$_GET['asset'];if(!isset($assets[$a])){http_response_code(404);exit;}header('Content-Type: '.$assets[$a]);readfile($a==='access.css'?dirname(__DIR__,2).'/public/assets/css/access-accounts.css':__DIR__.'/'.$a);exit;
 }
 $configPath=getenv('PHOTO_DESK_CONFIG')?:dirname(__DIR__,2).'/storage/photo-desk/config.php';
 if(!is_file($configPath)){http_response_code(503);exit('Кабинет ещё не установлен. Запусти tools/photo_desk_install.php через SSH.');}
@@ -14,8 +16,12 @@ if(PHP_SAPI!=='cli-server' && (empty($_SERVER['HTTPS']) || $_SERVER['HTTPS']==='
 ini_set('display_errors','0');date_default_timezone_set('Asia/Novosibirsk');
 set_exception_handler(static function(\Throwable $e){error_log('PhotoDesk: '.$e);http_response_code(500);echo 'Не удалось открыть кабинет. Проверь журнал сервера; сохранённые данные не удалены.';});
 $db=connect($storage);
+$accounts=new \HuntaAccess\Accounts($db,'desk',static fn()=>\HuntaAccess\database_snapshot($db,$storage.'/access-backups'));
 ini_set('session.use_strict_mode','1');session_name('photo_desk');session_save_path($storage.'/sessions');session_set_cookie_params(['httponly'=>true,'secure'=>PHP_SAPI!=='cli-server','samesite'=>'Lax','path'=>'/']);session_start();$_SESSION['csrf']??=bin2hex(random_bytes(32));
-$user=null;if(isset($_SESSION['login'])){$q=$db->prepare('SELECT * FROM users WHERE login=?');$q->execute([$_SESSION['login']]);$user=$q->fetch()?:null;if(!$user || !hash_equals(hash('sha256',$user['password_hash']),(string)($_SESSION['fp']??''))){$user=null;unset($_SESSION['login']);}}
+$user=null;if(isset($_SESSION['login'])){
+    $user=$accounts->find((string)$_SESSION['login']);
+    if(!$user || !$user['active'] || (int)($_SESSION['access_version']??1)!==(int)$user['session_version'] || !hash_equals(hash('sha256',$user['password_hash']),(string)($_SESSION['fp']??''))){$user=null;unset($_SESSION['login']);}
+}
 function token(): string{return '<input type="hidden" name="csrf" value="'.esc($_SESSION['csrf']).'">';}
 function go(string $to='./'): never {header('Location: '.$to,true,303);exit;}
 $err='';$draft=[];$draftId=0;
@@ -26,8 +32,8 @@ if($_SERVER['REQUEST_METHOD']==='POST'){
     if($action==='login'){
         $login=trim((string)($_POST['login']??''));$key=hash('sha256',($_SERVER['REMOTE_ADDR']??'').'|'.mb_strtolower($login));$ipkey=hash('sha256','ip:'.($_SERVER['REMOTE_ADDR']??''));
         $db->prepare('DELETE FROM attempts WHERE created_at<?')->execute([time()-900]);$q=$db->prepare('SELECT count(*) FROM attempts WHERE key_hash IN (?,?)');$q->execute([$key,$ipkey]);$blocked=(int)$q->fetchColumn()>=10;
-        $q=$db->prepare('SELECT * FROM users WHERE login=? COLLATE NOCASE');$q->execute([$login]);$candidate=$q->fetch();
-        if(!$blocked && $candidate && password_verify((string)($_POST['password']??''),$candidate['password_hash'])){session_regenerate_id(true);$_SESSION['login']=$candidate['login'];$_SESSION['fp']=hash('sha256',$candidate['password_hash']);$_SESSION['csrf']=bin2hex(random_bytes(32));go();}
+        $candidate=$accounts->find($login);
+        if(!$blocked && $candidate && $candidate['active'] && password_verify((string)($_POST['password']??''),$candidate['password_hash'])){session_regenerate_id(true);$_SESSION['login']=$candidate['login'];$_SESSION['fp']=hash('sha256',$candidate['password_hash']);$_SESSION['access_version']=(int)$candidate['session_version'];$_SESSION['csrf']=bin2hex(random_bytes(32));go();}
         $db->prepare('INSERT INTO attempts VALUES(?,?)')->execute([$key,time()]);$db->prepare('INSERT INTO attempts VALUES(?,?)')->execute([$ipkey,time()]);$err=$blocked?'Слишком много попыток. Подожди 15 минут.':'Не удалось войти. Проверь логин и пароль.';
     }else{
         if(!$user){http_response_code(403);exit('Сначала войди в кабинет.');}
@@ -35,6 +41,11 @@ if($_SERVER['REQUEST_METHOD']==='POST'){
         $stored=[];
         try{
             if((int)($_SERVER['CONTENT_LENGTH']??0)>0 && empty($_POST))throw new \RuntimeException('Превышен лимит загрузки PHP.');
+            if(str_starts_with($action,'access_')){
+                $own=$accounts->mutate($user['login'],$action,$_POST);
+                if($own){$_SESSION=[];session_destroy();go('?'.($action==='access_password'?'password_changed':'sessions_closed').'=1');}
+                go('?view=users&saved=1');
+            }
             $id=(int)($_POST['id']??0);$revision=(int)($_POST['revision']??0);
             if($action==='preview'){
                 $old=record($db,$id);if(!permitted($user['role'],'request'))throw new \RuntimeException('Превью обновляет юрист.');
@@ -112,13 +123,17 @@ function summary_preview(\PDO $db,array $row): void {
 function flag(array $row,string $key,string $label,bool $editable): void {
     echo '<form method="post" class="flag">'.form_context($row).'<input type="hidden" name="action" value="flag"><input type="hidden" name="flag" value="'.$key.'"><label><input type="checkbox" name="value" value="1" '.($row[$key]?'checked ':'').(!$editable?'disabled ':'').' data-flag> '.esc($label).'</label>'.($editable?'<button class="flag-save compact">Применить</button>':'').'</form>';
 }
-?><!doctype html><html lang="ru"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex,nofollow"><title>Запросы по фотографиям</title><link rel="icon" type="image/svg+xml" sizes="any" href="/?asset=favicon.svg&amp;v=1"><link rel="stylesheet" href="?asset=style.css"><script defer src="?asset=desk.js"></script></head><body>
-<header class="top"><span>▣ &nbsp; Кабинет фотографа и юриста</span><?php if($user):?><div><?=esc(['admin'=>'Режим разработки','lawyer'=>'Юрист','photographer'=>'Фотограф'][$user['role']])?> · <?=esc($user['login'])?> <form method="post"><?=token()?><button name="action" value="logout" class="text-button">Выйти ↗</button></form></div><?php endif?></header>
-<main><h1>Запросы по фотографиям</h1>
+?><!doctype html><html lang="ru"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex,nofollow"><title>Запросы по фотографиям</title><link rel="icon" type="image/svg+xml" sizes="any" href="/?asset=favicon.svg&amp;v=1"><link rel="stylesheet" href="?asset=style.css"><link rel="stylesheet" href="?asset=access.css"><script defer src="?asset=desk.js"></script></head><body>
+<header class="top"><span>▣ &nbsp; Кабинет фотографа и юриста</span><?php if($user):?><div><?=esc(['admin'=>'Режим разработки','lawyer'=>'Юрист','photographer'=>'Фотограф'][$user['role']])?> · <?=esc($user['login'])?> · <a href="?view=users"><?=$accounts->manager($user)?'Пользователи и пароли':'Мой пароль'?></a> · <a href="./">Запросы</a> <form method="post"><?=token()?><button name="action" value="logout" class="text-button">Выйти ↗</button></form></div><?php endif?></header>
+<main><?php if(($_GET['view']??'')!=='users'):?><h1>Запросы по фотографиям</h1><?php endif?>
 <?php if($err):?><div class="notice error" role="alert"><?=esc($err)?><?php if($draft):?><p>Текст оставлен в форме. Файлы нужно выбрать повторно. При конфликте сначала скопируй текст, затем обнови страницу.</p><?php endif?></div><?php endif?>
-<?php if(!$user):?><form method="post" class="login panel"><?=token()?><input type="hidden" name="action" value="login"><h2>Вход в кабинет</h2><label>Логин<input name="login" autocomplete="username" required></label><label>Пароль<input name="password" type="password" autocomplete="current-password" required></label><button class="primary">Войти</button></form>
+<?php if(!$user):?><?php if(isset($_GET['sessions_closed']))echo '<div class="notice">Все сеансы завершены. Войди заново.</div>';if(isset($_GET['password_changed']))echo '<div class="notice">Пароль изменён. Войди с новым паролем.</div>';?><form method="post" class="login panel"><?=token()?><input type="hidden" name="action" value="login"><h2>Вход в кабинет</h2><label>Логин<input name="login" autocomplete="username" required></label><label>Пароль<input name="password" type="password" autocomplete="current-password" required></label><button class="primary">Войти</button></form>
 <?php else:
 $flash=$_SESSION['flash']??'';unset($_SESSION['flash']);if($flash)echo '<div class="notice" role="status">'.esc($flash).'</div>';
+if(($_GET['view']??'')==='users' || str_starts_with((string)($_POST['action']??''),'access_')){
+    if(isset($_GET['saved']))echo '<div class="notice">Доступ сохранён.</div>';
+    \HuntaAccess\render($accounts,$user['login'],token());echo '</main></body></html>';exit;
+}
 $filter=in_array($_GET['filter']??'',['all','open','pending','ready','closed'],true)?$_GET['filter']:'all';$search=mb_substr(trim((string)($_GET['q']??'')),0,300);$page=max(1,(int)($_GET['page']??1));$selected=(int)($_GET['id']??0);
 $counts=$db->query('SELECT COUNT(*) total,COALESCE(SUM(closed=0),0) opened,COALESCE(SUM(closed=0 AND ready=0),0) pending,COALESCE(SUM(closed=0 AND ready=1),0) ready,COALESCE(SUM(closed=1),0) closed FROM cases')->fetch();
 ?><div class="toolbar"><form method="get" class="search"><input type="hidden" name="filter" value="<?=esc($filter)?>"><input name="q" value="<?=esc($search)?>" placeholder="ID, компания или текст" aria-label="Поиск"><button>Найти</button></form><nav class="filters"><?php foreach(['all'=>['Все','total'],'open'=>['Открытые','opened'],'pending'=>['Без ответа','pending'],'ready'=>['Ответ готов','ready'],'closed'=>['Закрытые','closed']] as $key=>[$label,$counter]):?><a class="button <?=$filter===$key?'active':''?>" href="?<?=esc(http_build_query(['filter'=>$key,'q'=>$search]))?>"><?=esc($label)?> <span><?=(int)$counts[$counter]?></span></a><?php endforeach?></nav><?php if(permitted($user['role'],'request')):?><button class="primary" data-new>＋ Новый запрос</button><?php endif?></div>

@@ -20,6 +20,7 @@ function ordaLoginSession(string $login,string $passwordHash): void {
     $_SESSION['user_id']=$login;
     $_SESSION['user_login']=$login;
     $_SESSION['orda_pw_fp']=ordaGuardPasswordFingerprint($passwordHash);
+    $_SESSION['orda_session_version']=(int)(blog_access($login)['session_version']??1);
 }
 function ordaThrottleBlockedSeconds(string $scope,string $key,int $max=5,int $window=900): int {
     global $db;
@@ -34,4 +35,14 @@ function ordaThrottleFail(string $scope,string $key): void {
 }
 function ordaThrottleClear(string $scope,string $key): void {
     global $db; $db->prepare('DELETE FROM orda_auth_attempts WHERE scope=? AND key_hash=?')->execute([$scope,hash('sha256',$key)]);
+}
+
+function blog_accounts(): \HuntaAccess\Accounts {
+    global $db,$storage;
+    return new \HuntaAccess\Accounts($db,'blog',static fn()=>database_backup_create($storage.'/access-backups'));
+}
+function blog_access(string $login): ?array { return blog_accounts()->find($login); }
+function blog_owner(): bool {
+    $account=blog_access((string)($_SESSION['user_login']??''));
+    return $account!==null && blog_accounts()->manager($account);
 }

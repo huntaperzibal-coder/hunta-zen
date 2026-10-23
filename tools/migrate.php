@@ -10,3 +10,12 @@ try { $db->exec(file_get_contents(ROOT.'/database.sql'));
     }
     $db->commit(); echo "Структура базы проверена. Записи сохранены.\n"; }
 catch (Throwable $e) { if ($db->inTransaction()) $db->rollBack(); throw $e; }
+
+$deskConfig=ROOT.'/storage/photo-desk/config.php';
+if(is_file($deskConfig)){
+    require_once ROOT.'/photo-desk/app.php';
+    $deskSettings=require $deskConfig;
+    $deskDb=PhotoDesk\connect($deskSettings['storage']);
+    PhotoDesk\schema($deskDb);
+    echo "Структура кабинета фотографий проверена. Пользователи и файлы сохранены.\n";
+}

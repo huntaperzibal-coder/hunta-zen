@@ -13,6 +13,8 @@ function schema(\PDO $db): void {
     CREATE TABLE IF NOT EXISTS attachments(id INTEGER PRIMARY KEY AUTOINCREMENT,case_id INTEGER NOT NULL REFERENCES cases(id),side TEXT NOT NULL CHECK(side IN ('request','response')),name TEXT NOT NULL,mime TEXT NOT NULL,size INTEGER NOT NULL,storage_key TEXT NOT NULL UNIQUE,created_at TEXT NOT NULL);
     CREATE TABLE IF NOT EXISTS events(id INTEGER PRIMARY KEY AUTOINCREMENT,case_id INTEGER NOT NULL REFERENCES cases(id),actor TEXT NOT NULL,action TEXT NOT NULL,created_at TEXT NOT NULL);
     CREATE TABLE IF NOT EXISTS attempts(key_hash TEXT NOT NULL,created_at INTEGER NOT NULL);
+    CREATE TABLE IF NOT EXISTS user_access(login TEXT PRIMARY KEY REFERENCES users(login),role TEXT NOT NULL,active INTEGER NOT NULL DEFAULT 1 CHECK(active IN (0,1)),session_version INTEGER NOT NULL DEFAULT 1,revision INTEGER NOT NULL DEFAULT 1);
+    INSERT OR IGNORE INTO user_access(login,role) SELECT login,role FROM users;
     CREATE INDEX IF NOT EXISTS attachments_case ON attachments(case_id);
     CREATE INDEX IF NOT EXISTS attempts_time ON attempts(created_at);");
 }
