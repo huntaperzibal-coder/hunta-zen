@@ -1,6 +1,9 @@
 <?php
 declare(strict_types=1);
 
+// The private desk can share this document root on its own exact hostname.
+require dirname(__DIR__).'/photo-desk/route.php';
+
 // Основа: принципы PDO/SQLite и единой проверки входа из altai-topo.
 const ROOT = __DIR__ . '/..';
 $configPath = getenv('HUNTA_CONFIG') ?: ROOT . '/storage/config.php';

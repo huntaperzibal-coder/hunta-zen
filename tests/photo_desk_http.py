@@ -64,3 +64,22 @@ with tempfile.TemporaryDirectory(prefix='photo-desk-') as tmp:
         print('Photo desk HTTP checks passed')
     finally:
         server.terminate();server.wait(timeout=5);log.close()
+    # The same public directory serves the desk on its exact hostname, before blog bootstrap.
+    log=open(store/'shared-server.log','w+')
+    shared=subprocess.Popen(['php','-S',f'127.0.0.1:{port}','-t',str(root/'public')],env=env,stdout=log,stderr=log)
+    try:
+        for _ in range(100):
+            try:
+                code,body,_=req(client(),headers={'Host':'files.hunta-zen.ru'})
+                if code==200:break
+            except OSError:time.sleep(.05)
+        assert code==200 and 'Вход в кабинет'.encode() in body,(code,body)
+        for path in ('admin.php','media.php','robots.php','sitemap.php'):
+            code,body,headers=req(client(),path,headers={'Host':'files.hunta-zen.ru'})
+            assert code==200 and 'Вход в кабинет'.encode() in body,(path,code,body)
+            assert headers['X-Robots-Tag'].startswith('noindex')
+        code,body,_=req(client(),'?asset=desk.js',headers={'Host':'files.hunta-zen.ru'})
+        assert code==200 and b'data-flag' in body
+        print('Shared document root routing checks passed')
+    finally:
+        shared.terminate();shared.wait(timeout=5);log.close()

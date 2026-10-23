@@ -2,14 +2,15 @@
 declare(strict_types=1);
 if(PHP_SAPI!=='cli'){http_response_code(404);exit;}
 require dirname(__DIR__).'/photo-desk/app.php';
-$root=dirname(__DIR__);$options=getopt('',['public:','url:','login:']);
+$root=dirname(__DIR__);$options=getopt('',['public:','url:','login:','shared']);
 foreach(['pdo_sqlite','mbstring','curl','fileinfo','dom'] as $extension)if(!extension_loaded($extension))throw new RuntimeException('Нужно расширение '.$extension);
 $storage=$root.'/storage/photo-desk';$configPath=$storage.'/config.php';
 $url=rtrim((string)($options['url']??'https://files.hunta-zen.ru'),'/');
 if(!filter_var($url,FILTER_VALIDATE_URL) || parse_url($url,PHP_URL_SCHEME)!=='https' || parse_url($url,PHP_URL_PATH))throw new RuntimeException('Нужен HTTPS-адрес без пути.');
+$shared=array_key_exists('shared',$options);
 $target=realpath((string)($options['public']??'/home/a/altaikemp/files.altaikemp.beget.tech/public_html'));
-if(!$target || !is_dir($target) || !is_writable($target))throw new RuntimeException('Папка сайта недоступна. Укажи --public=/полный/путь/public_html');
-if($target===realpath($root.'/public') || str_contains($target,'/storage'))throw new RuntimeException('Нельзя устанавливать кабинет в папку блога или данных.');
+if(!$shared && (!$target || !is_dir($target) || !is_writable($target)))throw new RuntimeException('Папка сайта недоступна. Укажи --public=/полный/путь/public_html');
+if(!$shared && ($target===realpath($root.'/public') || str_contains((string)$target,'/storage')))throw new RuntimeException('Нельзя устанавливать кабинет в папку блога или данных.');
 foreach([$storage,$storage.'/files',$storage.'/thumbs',$storage.'/sessions',$storage.'/backups'] as $dir)if(!is_dir($dir) && !mkdir($dir,0700,true))throw new RuntimeException('Не удалось создать '.$dir);
 if(!is_file($configPath)){
     $blogPath=getenv('HUNTA_CONFIG')?:$root.'/storage/config.php';$author=null;
@@ -34,6 +35,7 @@ if(!is_file($configPath)){
     require __DIR__.'/photo_desk_snapshot.php';PhotoDesk\snapshot($db,$storage);
     PhotoDesk\schema($db);
 }
+if($shared){echo "Кабинет установлен: $url/\nВ Beget привяжи files.hunta-zen.ru к тому же сайту, что и hunta-zen.ru.\nОсновной домен открывает блог, поддомен files — отдельный кабинет.\n";exit;}
 $entry="<?php\ndeclare(strict_types=1);\nputenv('PHOTO_DESK_CONFIG='.".var_export($configPath,true).");\nrequire ".var_export($root.'/photo-desk/public/index.php',true).";\n";
 foreach(['index.php','index.html','index.htm'] as $file){$path=$target.'/'.$file;if(is_file($path) && file_get_contents($path)!==$entry){$backup=$storage.'/backups/'.$file.'.'.date('Ymd-His').'.'.bin2hex(random_bytes(3));if(!copy($path,$backup) || hash_file('sha256',$path)!==hash_file('sha256',$backup))throw new RuntimeException('Не удалось проверить резервную копию стартовой страницы.');chmod($backup,0600);}}
 if(is_file($target.'/index.html') && !rename($target.'/index.html',$target.'/index.html.before-photo-desk'))throw new RuntimeException('Не удалось убрать прежнюю HTML-заглушку.');

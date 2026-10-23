@@ -24,4 +24,7 @@ with tempfile.TemporaryDirectory(prefix='desk-install-') as tmp:
     snapshots=list((desk/'backups').glob('*/desk.sqlite'));assert len(snapshots)==1
     backup=sqlite3.connect(snapshots[0]);assert backup.execute('pragma integrity_check').fetchone()[0]=='ok'
     assert any(p.read_text()=='old placeholder' for p in (desk/'backups').glob('index.php.*'))
-    print('Photo desk install checks passed')
+    entry_before=(public/'index.php').read_bytes()
+    subprocess.run(['php',str(repo/'tools/photo_desk_install.php'),'--shared','--public=/missing/not-accessible'],check=True,stdout=subprocess.PIPE)
+    assert (public/'index.php').read_bytes()==entry_before
+    print('Photo desk install checks passed; shared mode needs no external folder')
