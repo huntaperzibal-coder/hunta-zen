@@ -86,8 +86,20 @@ function upload(array $group,string $side,string $storage): array {
         if(!$size || $size>50*1024*1024 || !is_uploaded_file($tmp))throw new \RuntimeException('Максимум 50 МБ на файл; пустые файлы не принимаются.');
         $name=mb_substr(basename(str_replace('\\','/',$group['name'][$i])),0,200);
         $ext=strtolower(pathinfo($name,PATHINFO_EXTENSION));$mime=(new \finfo(FILEINFO_MIME_TYPE))->file($tmp);
-        if(!in_array($ext,['jpg','jpeg','png','webp','gif','tif','tiff','pdf','zip','txt','doc','docx','raw','cr2','cr3','nef','arw','dng'],true) || !in_array($mime,$allowed,true))throw new \RuntimeException('Разрешены фотографии, RAW, PDF, DOC/DOCX, TXT и ZIP.');
-        if(str_starts_with($mime,'image/') && !@getimagesize($tmp))throw new \RuntimeException('Не удалось прочитать изображение.');
+        $raw=in_array($ext,['raw','raf','cr2','cr3','nef','arw','dng'],true);
+        if(!in_array($ext,['jpg','jpeg','png','webp','gif','tif','tiff','pdf','zip','txt','doc','docx','raw','raf','cr2','cr3','nef','arw','dng'],true))throw new \RuntimeException('Разрешены фотографии, RAW (включая Fujifilm RAF), PDF, DOC/DOCX, TXT и ZIP.');
+        if($raw){
+            $rawMimes=['application/octet-stream','image/tiff','image/x-tiff','image/x-fuji-raf','image/x-fujifilm-raf','image/x-canon-cr2','image/x-canon-cr3','image/x-nikon-nef','image/x-sony-arw','image/x-adobe-dng','image/x-raw','image/x-dcraw'];
+            if($ext==='raf'){
+                $handle=fopen($tmp,'rb');$signature=$handle?fread($handle,16):'';if($handle)fclose($handle);
+                if($signature!=='FUJIFILMCCD-RAW ')throw new \RuntimeException('Файл .RAF не содержит заголовок Fujifilm RAW.');
+            }elseif(!in_array($mime,$rawMimes,true))throw new \RuntimeException('Не удалось определить формат RAW-файла.');
+            // Camera RAW is kept as evidence, never decoded as a web image or recompressed.
+            $mime='application/octet-stream';
+        }else{
+            if(!in_array($mime,$allowed,true))throw new \RuntimeException('Не удалось определить разрешённый формат файла.');
+            if(str_starts_with($mime,'image/') && !@getimagesize($tmp))throw new \RuntimeException('Не удалось прочитать изображение.');
+        }
         $key=bin2hex(random_bytes(24));
         if(!move_uploaded_file($tmp,$storage.'/files/'.$key))throw new \RuntimeException('Не удалось сохранить файл.');chmod($storage.'/files/'.$key,0600);
         $result[]=['side'=>$side,'name'=>$name,'mime'=>$mime,'size'=>$size,'storage_key'=>$key];

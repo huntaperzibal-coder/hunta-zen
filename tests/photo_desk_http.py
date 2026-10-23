@@ -69,6 +69,20 @@ with tempfile.TemporaryDirectory(prefix='photo-desk-') as tmp:
         assert post(owner,{'csrf':'bad','action':'flag','id':'1','revision':revision(),'flag':'closed'})[0]==403
         assert req(owner)[2]['X-Robots-Tag'].startswith('noindex')
         assert req(owner,'?asset=../../config.php')[0]==404
+        def upload_raw(name,content):
+            boundary='raw-desk-boundary';parts=[]
+            for key,value in {'csrf':csrf(owner),'action':'save','id':'1','revision':str(revision())}.items():
+                parts.append(f'--{boundary}\r\nContent-Disposition: form-data; name="{key}"\r\n\r\n{value}\r\n'.encode())
+            parts.append(f'--{boundary}\r\nContent-Disposition: form-data; name="response[]"; filename="{name}"\r\nContent-Type: application/octet-stream\r\n\r\n'.encode()+content+b'\r\n')
+            parts.append(f'--{boundary}--\r\n'.encode())
+            return req(owner,data=b''.join(parts),headers={'Content-Type':f'multipart/form-data; boundary={boundary}'})
+        raf=b'FUJIFILMCCD-RAW '+bytes(range(256))*8
+        assert upload_raw('20170510_0127.RAF',raf)[0]==200
+        raw_id,raw_mime=db.execute("select id,mime from attachments where name='20170510_0127.RAF'").fetchone()
+        assert raw_mime=='application/octet-stream'
+        assert req(lawyer,f'?file={raw_id}&download=1')[1]==raf,'RAF original bytes preserved'
+        assert upload_raw('not-a-camera.RAF',b'not a Fujifilm raw file')[0]==422
+        assert db.execute("select count(*) from attachments where name='not-a-camera.RAF'").fetchone()[0]==0
         print('Photo desk HTTP checks passed')
     finally:
         server.terminate();server.wait(timeout=5);log.close()
