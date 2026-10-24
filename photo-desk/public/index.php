@@ -84,13 +84,33 @@ if($_SERVER['REQUEST_METHOD']==='POST'){
 }
 if(isset($_GET['file']) || isset($_GET['preview'])){
     if(!$user){http_response_code(403);exit('Требуется вход.');}
-    $name='preview.jpg';$mime='';$path='';
+    $name='preview.jpg';$mime='';$path='';$file=null;$sourcePreview=false;
     if(isset($_GET['file'])){$q=$db->prepare('SELECT * FROM attachments WHERE id=?');$q->execute([(int)$_GET['file']]);$file=$q->fetch();if($file){$path=$storage.'/files/'.$file['storage_key'];$mime=$file['mime'];$name=$file['name'];}}
-    else{$row=record($db,(int)$_GET['preview']);if($row['preview_key']){$path=$storage.'/files/'.$row['preview_key'];$mime=(new \finfo(FILEINFO_MIME_TYPE))->file($path);}}
+    else{
+        $q=$db->prepare('SELECT * FROM cases WHERE id=?');$q->execute([(int)$_GET['preview']]);$row=$q->fetch();
+        if($row && $row['preview_key']){
+            $path=$storage.'/files/'.$row['preview_key'];
+            if(is_file($path)){
+                $mime=(new \finfo(FILEINFO_MIME_TYPE))->file($path);
+                $ext=['image/jpeg'=>'jpg','image/png'=>'png','image/webp'=>'webp','image/gif'=>'gif'][$mime]??'bin';
+                $name='source-preview-'.(int)$row['id'].'.'.$ext;$sourcePreview=true;
+                $file=['name'=>$name,'mime'=>$mime,'size'=>filesize($path),'storage_key'=>$row['preview_key'],'created_at'=>$row['created_at']];
+            }
+        }
+    }
     if(!$path || !is_file($path)){http_response_code(404);exit('Файл не найден.');}
     if(isset($_GET['metadata'])){
-        if(!isset($_GET['file']) || !$file){http_response_code(404);exit('Файл не найден.');}
-        $metadata=photo_metadata($file,$storage);session_write_close();
+        if(!$file){http_response_code(404);exit('Файл не найден.');}
+        $metadata=photo_metadata($file,$storage);
+        if($sourcePreview){
+            foreach($metadata['rows'] as &$field){
+                if($field['group']==='Файл' && $field['label']==='Источник метаданных')$field['value']='Сохранённая картинка источника';
+                if($field['group']==='Файл' && $field['label']==='Загружен в кабинет')$field['label']='Запрос создан';
+            }unset($field);
+            if($row['source_url']!=='')$metadata['rows'][]=['group'=>'Источник','label'=>'Страница','value'=>metadata_text($row['source_url'])];
+            $metadata['notice']=trim('Данные сохранённой картинки источника. Сток может удалить EXIF/IPTC из превью. '.$metadata['notice']);
+        }
+        session_write_close();
         if(isset($_GET['download'])){
             $body=metadata_download($metadata);header('Content-Type: text/plain; charset=UTF-8');
             header("Content-Disposition: attachment; filename=metadata.txt; filename*=UTF-8''".rawurlencode($file['name'].'.metadata.txt'));
@@ -169,7 +189,7 @@ $req=permitted($user['role'],'request');$resp=permitted($user['role'],'response'
 <section class="case <?=$row['closed']?'closed':($row['ready']?'ready':'')?>" id="case-<?=$id?>"><div class="case-head"><button class="fold" aria-expanded="<?=($selected===$id||(!$selected&&$n===0)||$editing)?'true':'false'?>" aria-controls="body-<?=$id?>">⌄</button><?php summary_preview($db,$row,$storage);?><a class="case-title" href="?<?=esc(http_build_query(['id'=>$id,'filter'=>$filter,'q'=>$search,'page'=>$page]))?>#case-<?=$id?>">№ <?=str_pad((string)$id,4,'0',STR_PAD_LEFT)?> · <?=esc($row['title'])?></a><span class="company"><?=esc($row['company'])?></span><small><?=esc(date('d.m.Y',strtotime($row['created_at'])))?></small><span class="badge"><?=$row['closed']?'Закрыта':($row['ready']?'Ответ готов · Открыта':'Без ответа')?></span><div class="flags"><?php flag($row,'ready','Фотограф: ответ готов',$resp);flag($row,'closed','Юрист: закрыто',$req);?></div></div>
 <div class="case-body" id="body-<?=$id?>" <?=($selected===$id||(!$selected&&$n===0)||$editing)?'':'hidden'?>>
 <section class="panel"><h2>Запрос юриста</h2>
-<?php if($row['source_url']):?><div class="source"><?php if($row['preview_key']):?><a class="image-link" data-image href="?preview=<?=$id?>"><img loading="lazy" src="?preview=<?=$id?>&amp;thumb=1" alt="Превью источника"></a><?php endif?><div><small><?=esc(parse_url($row['source_url'],PHP_URL_HOST))?></small><strong><?=esc($row['source_title']?:'Источник фотографии')?></strong><a href="<?=esc($row['source_url'])?>" target="_blank" rel="noopener noreferrer">Открыть источник ↗</a></div></div><?php if($req):?><form method="post" class="preview-form"><?=form_context($row)?><input type="hidden" name="action" value="preview"><button class="text-button">↻ Получить превью</button><details class="manual-preview"><summary>Указать картинку</summary><input type="url" name="preview_image_url" placeholder="HTTPS-ссылка на саму картинку" aria-label="Ссылка на картинку для превью"><button class="compact">Загрузить превью</button></details></form><?php endif?><?php endif?>
+<?php if($row['source_url']):?><div class="source"><?php if($row['preview_key']):?><div class="source-photo"><a class="image-link" data-image href="?preview=<?=$id?>"><img loading="lazy" src="?preview=<?=$id?>&amp;thumb=1" alt="Превью источника"></a><a class="metadata-link" href="?preview=<?=$id?>&amp;metadata=1" data-metadata>Посмотреть метаданные</a><a class="metadata-link" href="?preview=<?=$id?>&amp;metadata=1&amp;download=1">Скачать метаданные ↓</a></div><?php endif?><div><small><?=esc(parse_url($row['source_url'],PHP_URL_HOST))?></small><strong><?=esc($row['source_title']?:'Источник фотографии')?></strong><a href="<?=esc($row['source_url'])?>" target="_blank" rel="noopener noreferrer">Открыть источник ↗</a></div></div><?php if($req):?><form method="post" class="preview-form"><?=form_context($row)?><input type="hidden" name="action" value="preview"><button class="text-button">↻ Получить превью</button><details class="manual-preview"><summary>Указать картинку</summary><input type="url" name="preview_image_url" placeholder="HTTPS-ссылка на саму картинку" aria-label="Ссылка на картинку для превью"><button class="compact">Загрузить превью</button></details></form><?php endif?><?php endif?>
 <?php attachments($db,$id,'request',$req,$row,$storage);?>
 <?php if($req && !$row['preview_key']):?><p class="preview-hint">Нет картинки? Скопируй фото и вставь Ctrl+V в «Изменить запрос» или прикрепи файл.</p><?php endif?>
 <?php if($req):?><?php if($display['request_note']!==''):?><p class="note"><?=nl2br(esc($display['request_note']))?></p><?php endif?><details class="edit-request" <?=($editing?'open':'')?>><summary>✎ Изменить запрос · добавить фото</summary><form method="post" enctype="multipart/form-data" data-upload><?=form_context($display)?><input type="hidden" name="action" value="save"><div class="fields"><label>Название<input name="title" maxlength="200" value="<?=esc($display['title'])?>" required></label><label>Компания<input name="company" maxlength="300" value="<?=esc($display['company'])?>"></label></div><label>Ссылка<input type="url" name="source_url" value="<?=esc($display['source_url'])?>"></label><label>Запрос<textarea name="request_note" maxlength="20000"><?=esc($display['request_note'])?></textarea></label><label class="upload">＋ Файлы · можно вставить фото Ctrl+V<input type="file" name="request[]" multiple></label><div class="local-previews"></div><button class="button">Сохранить запрос</button></form></details><?php else:?><p class="note"><?=nl2br(esc($row['request_note']))?></p><?php endif?></section>

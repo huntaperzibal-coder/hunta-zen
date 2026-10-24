@@ -147,6 +147,36 @@ with tempfile.TemporaryDirectory(prefix='photo-desk-') as tmp:
         assert 'X-T2' in [row['value'] for row in jpeg_meta['rows']]
         assert 'Загруженный оригинал' in [row['value'] for row in jpeg_meta['rows']]
         assert req(lawyer,f'?file={jpeg_id}&download=1')[1]==jpeg
+        # Source preview metadata reads the saved image, through the same login gate.
+        assert req(guest,'?preview=1&metadata=1')[0]==403
+        assert req(guest,'?preview=1&metadata=1&download=1')[0]==403
+        assert req(owner,'?preview=999999&metadata=1')[0]==404
+        assert req(owner,'?preview=1&metadata=1')[0]==404 # no preview assigned
+        key=db.execute('select storage_key from attachments where id=?',(jpeg_id,)).fetchone()[0]
+        db.execute("update cases set preview_key=?,source_url='https://stock.example.test/photo',source_title='Source photo' where id=1",(key,));db.commit()
+        for user in (owner,lawyer,photo):
+            page=req(user)[1].decode()
+            assert 'href="?preview=1&amp;metadata=1" data-metadata' in page
+            assert 'href="?preview=1&amp;metadata=1&amp;download=1"' in page
+            code,body,headers=req(user,'?preview=1&metadata=1');assert code==200
+            meta=json.loads(body);vals=[r['value'] for r in meta['rows']]
+            assert 'X-T2' in vals and '40 × 30' in vals
+            assert 'Сохранённая картинка источника' in vals and 'https://stock.example.test/photo' in vals
+            assert 'Сток может удалить EXIF/IPTC' in meta['notice']
+            assert str(store).encode() not in body and b'storage_key' not in body
+            assert headers['Content-Type'].startswith('application/json')
+            code,report,headers=req(user,'?preview=1&metadata=1&download=1')
+            assert code==200 and report.startswith(b'\xef\xbb\xbf') and b'X-T2' in report
+            assert headers['Content-Type'].startswith('text/plain') and 'attachment' in headers['Content-Disposition']
+        assert req(owner,'?preview=1&download=1')[1]==jpeg
+        # A saved PNG without EXIF still returns image dimensions and a clear notice.
+        png_key='preview-without-exif';(store/'files'/png_key).write_bytes(png)
+        db.execute('update cases set preview_key=? where id=1',(png_key,));db.commit()
+        meta=json.loads(req(lawyer,'?preview=1&metadata=1')[1])
+        assert '1 × 1' in [r['value'] for r in meta['rows']] and 'EXIF/IPTC не найдены' in meta['notice']
+        assert req(owner,'?preview=1&download=1')[1]==png
+        db.execute('update cases set preview_key=NULL where id=1');db.commit()
+
         assert upload_raw('not-a-camera.RAF',b'not a Fujifilm raw file')[0]==422
         assert db.execute("select count(*) from attachments where name='not-a-camera.RAF'").fetchone()[0]==0
         # CR2 JPEG EXIF deliberately disagrees with native RAW metadata.
