@@ -195,7 +195,9 @@ function raf_preview(array $file,string $storage): ?string {
 function attachment_preview_url(array $file,string $storage): string {
     $url='?file='.(int)$file['id'];
     if(in_array($file['mime'],['image/jpeg','image/png','image/webp','image/gif'],true))return $url;
-    return raf_preview($file,$storage)!==null?$url.'&raw_preview=1':'';
+    return raw_preview($file,$storage)!==null?$url.'&raw_preview=1':'';
 }
 
+require_once __DIR__.'/cr2.php';
 require_once __DIR__.'/metadata.php';
+

@@ -50,6 +50,7 @@ function raf_native_metadata(string $path): array {
 }
 function photo_metadata(array $file,string $storage): array {
     $original=$storage.'/files/'.$file['storage_key'];
+    $cr2=strtolower(pathinfo($file['name'],PATHINFO_EXTENSION))==='cr2';
     $raf=strtolower(pathinfo($file['name'],PATHINFO_EXTENSION))==='raf';
     $path=$raf?raf_preview($file,$storage):$original;
     $rows=[];$add=function(string $group,string $label,mixed $value)use(&$rows):void{
@@ -57,7 +58,8 @@ function photo_metadata(array $file,string $storage): array {
     };
     $add('Файл','Имя',$file['name']);$add('Файл','Размер, байт',$file['size']);
     $add('Файл','Загружен в кабинет',$file['created_at']);
-    $add('Файл','Источник метаданных',$raf?'Исходный файл RAF: заголовок и каталог RAW; EXIF — из блока внутри RAF':'Загруженный оригинал');
+    $add('Файл','Источник метаданных',$cr2?'Исходный файл CR2: каталоги TIFF, EXIF и GPS':($raf?'Исходный файл RAF: заголовок и каталог RAW; EXIF — из блока внутри RAF':'Загруженный оригинал'));
+    if($cr2){$native=cr2_native_metadata($original);return ['name'=>$file['name'],'rows'=>array_merge($rows,$native['rows']),'notice'=>$native['notice']];}
     $rafNotice='';if($raf){$native=raf_native_metadata($original);$rows=array_merge($rows,$native['rows']);$rafNotice=$native['notice'];}
     if(!$path)return ['name'=>$file['name'],'rows'=>$rows,'notice'=>trim($rafNotice.' EXIF-блок внутри RAF недоступен; показаны метаданные RAW.')];
     $imageInfo=[];$info=@getimagesize($path,$imageInfo);
@@ -89,3 +91,4 @@ function metadata_download(array $metadata): string {
     if($metadata['notice'])$text.="\r\n".$metadata['notice']."\r\n";
     return "\xEF\xBB\xBF".$text;
 }
+

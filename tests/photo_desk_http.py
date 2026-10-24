@@ -149,6 +149,48 @@ with tempfile.TemporaryDirectory(prefix='photo-desk-') as tmp:
         assert req(lawyer,f'?file={jpeg_id}&download=1')[1]==jpeg
         assert upload_raw('not-a-camera.RAF',b'not a Fujifilm raw file')[0]==422
         assert db.execute("select count(*) from attachments where name='not-a-camera.RAF'").fetchone()[0]==0
+        # CR2 JPEG EXIF deliberately disagrees with native RAW metadata.
+        def canon_raw(order='<', preview=True, broken=False):
+            out=bytearray(1024)
+            out[:16]=(b'II' if order=='<' else b'MM')+struct.pack(order+'HI',42,16)+b'CR\x02\x00'+bytes(4)
+            cursor=512
+            def directory(offset,tags,next_ifd=0):
+                nonlocal cursor
+                struct.pack_into(order+'H',out,offset,len(tags))
+                for i,(tag,kind,count,value) in enumerate(tags):
+                    data=value if isinstance(value,bytes) else struct.pack(order+{3:'H',4:'I',5:'II'}[kind],*value)
+                    if len(data)<=4: field=data.ljust(4,b'\x00')
+                    else:
+                        field=struct.pack(order+'I',cursor);out[cursor:cursor+len(data)]=data;cursor+=len(data)
+                    out[offset+2+i*12:offset+14+i*12]=struct.pack(order+'HHI',tag,kind,count)+field
+                struct.pack_into(order+'I',out,offset+2+12*len(tags),next_ifd)
+            directory(16,[(0x10f,2,6,b'Canon\x00'),(0x110,2,13,b'RAW EOS TEST\x00'),
+                (0x111,4,1,[4294967295 if broken else 1024]),(0x117,4,1,[len(jpeg) if preview else 0]),
+                (0x8769,4,1,[256]),(0x8825,4,1,[384])],16) # cyclic next IFD must terminate
+            directory(256,[(0x829a,5,1,[1,125]),(0x8827,3,1,[400]),(0x9003,2,20,b'2020:01:02 03:04:05\x00')])
+            directory(384,[(1,2,2,b'N\x00')])
+            return bytes(out)+jpeg
+        for suffix,order,preview,broken in [('little','<',True,False),('big','>',True,False),('no-jpeg','<',False,False),('bad-offset','<',True,True)]:
+            cr2=canon_raw(order,preview,broken);name='canon-'+suffix+'.CR2'
+            code,body,_=upload_raw(name,cr2);assert code==200,(code,body)
+            cid=db.execute('select id from attachments where name=?',(name,)).fetchone()[0]
+            url=f'?file={cid}&raw_preview=1'
+            assert req(guest,url)[0]==403
+            assert req(lawyer,url)[0]==(200 if preview and not broken else 404)
+            if preview and not broken:
+                assert req(lawyer,url)[1]==jpeg
+                assert req(owner,url+'&thumb=1')[2]['Content-Type']=='image/jpeg'
+                assert f'href="?file={cid}&amp;raw_preview=1"' in req(owner)[1].decode()
+            assert req(lawyer,url+'&download=1')[1]==cr2
+            assert req(guest,f'?file={cid}&metadata=1')[0]==403
+            meta=json.loads(req(lawyer,f'?file={cid}&metadata=1')[1]);vals=[r['value'] for r in meta['rows']]
+            assert 'RAW EOS TEST' in vals and '1/125' in vals and '400' in vals and 'N' in vals,meta
+            assert 'X-T2' not in vals and 'FUJIFILM' not in vals, 'JPEG must never supply CR2 metadata'
+            assert all('исходный RAW' in r['group'] for r in meta['rows'] if r['group']!='Файл')
+            assert str(store) not in json.dumps(meta)
+            report=req(photo,f'?file={cid}&metadata=1&download=1')[1]
+            assert b'RAW EOS TEST' in report and b'X-T2' not in report
+            assert req(owner,f'?file={cid}&download=1')[1]==cr2
         print('Photo desk HTTP checks passed')
     finally:
         server.terminate();server.wait(timeout=5);log.close()
@@ -171,3 +213,4 @@ with tempfile.TemporaryDirectory(prefix='photo-desk-') as tmp:
         print('Shared document root routing checks passed')
     finally:
         shared.terminate();shared.wait(timeout=5);log.close()
+

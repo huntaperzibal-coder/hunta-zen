@@ -98,7 +98,7 @@ if(isset($_GET['file']) || isset($_GET['preview'])){
         header('Content-Length: '.strlen($body));echo $body;exit;
     }
     if(isset($_GET['file'],$_GET['raw_preview']) && !isset($_GET['download'])){
-        $previewPath=raf_preview($file,$storage);
+        $previewPath=raw_preview($file,$storage);
         if($previewPath===null){http_response_code(404);exit('Встроенное JPEG-превью отсутствует.');}
         $path=$previewPath;$mime='image/jpeg';$name.='.jpg';
     }
@@ -180,3 +180,4 @@ $req=permitted($user['role'],'request');$resp=permitted($user['role'],'response'
 <?php endforeach?>
 <nav class="pagination" aria-label="Страницы"><?php if($page>1):?><a class="button" href="?<?=esc(http_build_query(['filter'=>$filter,'q'=>$search,'page'=>$page-1]))?>">← Назад</a><?php endif?><span>Найдено: <?=$total?> · Страница <?=$page?> из <?=$pages?></span><?php if($page<$pages):?><a class="button" href="?<?=esc(http_build_query(['filter'=>$filter,'q'=>$search,'page'=>$page+1]))?>">Далее →</a><?php endif?></nav>
 <?php endif?></main><dialog id="image-view"><button type="button" class="close-view" aria-label="Закрыть">✕</button><img alt="Увеличенное изображение"><a class="button" href="" download>Скачать оригинал ↓</a></dialog><dialog id="metadata-view" aria-labelledby="metadata-title"><button type="button" class="close-view" aria-label="Закрыть">✕</button><h2 id="metadata-title">Метаданные фотографии</h2><p data-metadata-name></p><p data-metadata-notice role="status"></p><div class="metadata-scroll"><table><tbody></tbody></table></div><a class="button" data-metadata-download href="#">Скачать в TXT ↓</a></dialog></body></html>
+
