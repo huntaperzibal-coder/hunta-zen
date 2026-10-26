@@ -190,6 +190,17 @@ function preview_metadata(string $html,string $url): array {
     if(!$image)foreach($dom->getElementsByTagName('link') as $link)if(strtolower($link->getAttribute('rel'))==='image_src'){$image=$link->getAttribute('href');break;}
     return ['title'=>mb_substr(trim($title),0,300),'image'=>$image?resolve_url($url,$image):''];
 }
+/** Resolve a blank new-request title without changing manually entered names. */
+function source_request_title(string $url): string {
+    $url=source_url($url);
+    if($url==='')throw new \RuntimeException('Добавь ссылку или название.');
+    [$body,$type,$finalUrl]=public_fetch($url,8000000);
+    if(!str_contains($type,'text/html'))throw new \RuntimeException('У источника нет названия страницы.');
+    $meta=preview_metadata($body,$finalUrl);
+    $title=trim($meta['title']);
+    if($title==='' || $title===parse_url($finalUrl,PHP_URL_HOST))throw new \RuntimeException('Источник не указал название.');
+    return mb_substr($title,0,200);
+}
 function preview(string $url,string $storage,bool $directImage=false): array {
     [$body,$type,$finalUrl]=public_fetch($url,8000000);
     if($directImage || str_starts_with($type,'image/'))return ['title'=>'','key'=>cache_preview_image($body,$storage)];

@@ -11,7 +11,7 @@ body{font-size:13px;line-height:1.4}.top{padding:8px 18px;font-size:12px}main{pa
 
 /* Only the creator badge carries an identity color; case colors still mean status. */
 .requester-badge{display:inline-grid;place-items:center;flex:0 0 23px;width:23px;height:23px;border-radius:50%;font:600 12px/1 system-ui;vertical-align:middle;color:#fff}
-.requester-katya{background:#3e65a0}
+.requester-katya{background:#287bc1}
 .requester-valera{background:#795295}
 .requester-other{background:#5c6a7e}
 

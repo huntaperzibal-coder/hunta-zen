@@ -33,6 +33,14 @@ with tempfile.TemporaryDirectory(prefix='photo-desk-') as tmp:
         assert req(guest,'?file=1')[0]==403
         assert post(guest,{'action':'create'})[0]==403
         login(owner,'owner');login(lawyer,'lawyer');login(photo,'photo')
+        page=req(owner)[1].decode()
+        new_form=page.split('id="new-case"',1)[1].split('</form>',1)[0]
+        assert new_form.index('name="source_url"') < new_form.index('name="title"')
+        assert 'Заполнится из ссылки при создании' in new_form
+        assert 'required' not in new_form.split('name="title"',1)[1].split('>',1)[0]
+        status,body,_=post(owner,{'csrf':csrf(owner),'action':'create','source_url':'https://127.0.0.1/photo','company':'Сохранить поле'})
+        assert status==422 and 'Впиши название вручную' in body.decode()
+        assert 'Сохранить поле' in body.decode(), 'failed lookup preserves entered form'
         assert post(owner,{'csrf':csrf(owner),'action':'create','title':'Озеро','company':'Тест'})[0]==200
         db=sqlite3.connect(store/'desk.sqlite')
         assert db.execute('select count(*) from cases').fetchone()[0]==1

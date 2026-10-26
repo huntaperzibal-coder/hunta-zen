@@ -17,7 +17,7 @@ document.querySelectorAll('[data-flag]').forEach(input=>input.addEventListener('
 }));
 document.querySelectorAll('[data-confirm]').forEach(button=>button.addEventListener('click',e=>{if(!confirm(button.dataset.confirm))e.preventDefault();}));
 document.querySelectorAll('.fold').forEach(button=>button.addEventListener('click',()=>{const body=document.getElementById(button.getAttribute('aria-controls'));body.hidden=!body.hidden;button.setAttribute('aria-expanded',String(!body.hidden));}));
-document.querySelector('[data-new]')?.addEventListener('click',()=>{const panel=document.getElementById('new-case');panel.open=true;panel.scrollIntoView({behavior:'smooth',block:'start'});panel.querySelector('input[name=title]').focus();});
+document.querySelector('[data-new]')?.addEventListener('click',()=>{const panel=document.getElementById('new-case');panel.open=true;panel.scrollIntoView({behavior:'smooth',block:'start'});panel.querySelector('input[name=source_url]').focus();});
 const viewer=document.getElementById('image-view');
 document.querySelectorAll('[data-image]').forEach(a=>a.addEventListener('click',e=>{if(!viewer?.showModal)return;e.preventDefault();viewer.querySelector('img').src=a.href;viewer.querySelector('a').href=a.href+'&download=1';viewer.showModal();}));
 viewer?.querySelector('button').addEventListener('click',()=>viewer.close());
@@ -79,3 +79,7 @@ document.querySelectorAll('form[data-delete-case]').forEach(form=>form.addEventL
   dirty.clear();
 }));
 document.querySelectorAll('[name=delete_word]').forEach(input=>input.addEventListener('input',()=>input.setCustomValidity('')));
+
+// Opening the inline form directly uses the same source-first workflow.
+const newCase=document.getElementById('new-case');
+newCase?.addEventListener('toggle',()=>{if(newCase.open)newCase.querySelector('input[name=source_url]').focus();});
