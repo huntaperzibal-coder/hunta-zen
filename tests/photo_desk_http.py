@@ -235,6 +235,27 @@ with tempfile.TemporaryDirectory(prefix='photo-desk-') as tmp:
         krev=db.execute('SELECT revision FROM cases WHERE id=?',[kid]).fetchone()[0]
         assert post(valera,{'csrf':csrf(valera),'action':'save','id':kid,'revision':krev,'request_note':'Общая работа','created_by':'valera'})[0]==200
         assert db.execute('SELECT created_by FROM cases WHERE id=?',[kid]).fetchone()[0]=='katya','another lawyer edit keeps author'
+        # Entire-request removal requires CSRF, role, current revision and the typed word.
+        owner_page=req(owner)[1].decode();assert 'data-delete-case' in owner_page and 'name="delete_word"' in owner_page
+        assert 'data-delete-case' not in req(photo)[1].decode(),'photographer cannot delete a request'
+        deletion={'action':'delete_case','id':1,'revision':revision(),'delete_word':'удалить'}
+        assert post(owner,deletion)[0]==403,'deletion requires CSRF'
+        assert post(photo,{**deletion,'csrf':csrf(photo)})[0]==422,'role cannot be forged'
+        assert post(owner,{**deletion,'csrf':csrf(owner),'delete_word':''})[0]==422,'word enforced on server'
+        assert post(owner,{**deletion,'csrf':csrf(owner),'revision':revision()-1})[0]==422,'stale page cannot delete'
+        before=db.execute('SELECT count(*) FROM attachments WHERE case_id=1').fetchone()[0]
+        source_bytes=(store/'files'/preview_key).read_bytes()
+        code,body,_=post(owner,{**deletion,'csrf':csrf(owner)})
+        assert code==200 and 'id="case-1"' not in body.decode(),'deleted request disappears'
+        assert db.execute('SELECT deleted_at FROM cases WHERE id=1').fetchone()[0]
+        assert db.execute('SELECT count(*) FROM attachments WHERE case_id=1').fetchone()[0]==before
+        assert (store/'files'/preview_key).read_bytes()==source_bytes,'original evidence bytes retained'
+        for reader in (owner,photo,katya,valera):
+            assert 'id="case-1"' not in req(reader)[1].decode()
+            assert 'id="case-1"' not in req(reader,'?q='+urllib.parse.quote('Озеро'))[1].decode()
+            for path in ('?file=1','?file=1&download=1','?file=1&thumb=1','?file=1&metadata=1','?file=1&raw_preview=1','?preview=1','?preview=1&metadata=1'):
+                assert req(reader,path)[0]==404,(reader,path)
+        assert post(owner,{**deletion,'csrf':csrf(owner)})[0]==422,'removed request cannot be deleted twice'
         print('Photo desk HTTP checks passed')
     finally:
         server.terminate();server.wait(timeout=5);log.close()

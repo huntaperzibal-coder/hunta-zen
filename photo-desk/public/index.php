@@ -47,7 +47,10 @@ if($_SERVER['REQUEST_METHOD']==='POST'){
                 go('?view=users&saved=1');
             }
             $id=(int)($_POST['id']??0);$revision=(int)($_POST['revision']??0);
-            if($action==='preview'){
+            if($action==='delete_case'){
+                delete_case($db,$id,$revision,$user['role'],$user['login'],(string)($_POST['delete_word']??''));
+                $_SESSION['flash']='Запрос № '.$id.' удалён.';go('./');
+            }elseif($action==='preview'){
                 $old=record($db,$id);if(!permitted($user['role'],'request'))throw new \RuntimeException('Превью обновляет юрист.');
                 if((int)$old['revision']!==$revision)throw new \RuntimeException('Карточка изменилась. Обнови страницу.');
                 $manual=trim((string)($_POST['preview_image_url']??''));
@@ -85,9 +88,9 @@ if($_SERVER['REQUEST_METHOD']==='POST'){
 if(isset($_GET['file']) || isset($_GET['preview'])){
     if(!$user){http_response_code(403);exit('Требуется вход.');}
     $name='preview.jpg';$mime='';$path='';$file=null;$sourcePreview=false;
-    if(isset($_GET['file'])){$q=$db->prepare('SELECT * FROM attachments WHERE id=?');$q->execute([(int)$_GET['file']]);$file=$q->fetch();if($file){$path=$storage.'/files/'.$file['storage_key'];$mime=$file['mime'];$name=$file['name'];}}
+    if(isset($_GET['file'])){$q=$db->prepare('SELECT * FROM attachments WHERE id=? AND EXISTS(SELECT 1 FROM cases WHERE cases.id=attachments.case_id AND deleted_at IS NULL)');$q->execute([(int)$_GET['file']]);$file=$q->fetch();if($file){$path=$storage.'/files/'.$file['storage_key'];$mime=$file['mime'];$name=$file['name'];}}
     else{
-        $q=$db->prepare('SELECT * FROM cases WHERE id=?');$q->execute([(int)$_GET['preview']]);$row=$q->fetch();
+        $q=$db->prepare('SELECT * FROM cases WHERE id=? AND deleted_at IS NULL');$q->execute([(int)$_GET['preview']]);$row=$q->fetch();
         if($row && $row['preview_key']){
             $path=$storage.'/files/'.$row['preview_key'];
             if(is_file($path)){
@@ -160,7 +163,7 @@ function summary_preview(\PDO $db,array $row,string $storage): void {
 function flag(array $row,string $key,string $label,bool $editable): void {
     echo '<form method="post" class="flag">'.form_context($row).'<input type="hidden" name="action" value="flag"><input type="hidden" name="flag" value="'.$key.'"><label><input type="checkbox" name="value" value="1" '.($row[$key]?'checked ':'').(!$editable?'disabled ':'').' data-flag> '.esc($label).'</label>'.($editable?'<button class="flag-save compact">Применить</button>':'').'</form>';
 }
-?><!doctype html><html lang="ru"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex,nofollow"><title>Запросы по фотографиям</title><link rel="icon" type="image/svg+xml" sizes="any" href="/?asset=favicon.svg&amp;v=1"><link rel="stylesheet" href="?asset=style.css&amp;v=2"><link rel="stylesheet" href="?asset=access.css"><script defer src="?asset=desk.js"></script></head><body>
+?><!doctype html><html lang="ru"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex,nofollow"><title>Запросы по фотографиям</title><link rel="icon" type="image/svg+xml" sizes="any" href="/?asset=favicon.svg&amp;v=1"><link rel="stylesheet" href="?asset=style.css&amp;v=3"><link rel="stylesheet" href="?asset=access.css"><script defer src="?asset=desk.js&amp;v=2"></script></head><body>
 <header class="top"><span>▣ &nbsp; Кабинет фотографа и юриста</span><a class="zen-link" href="https://hunta-zen.ru/"><img src="?asset=blog-icon.svg" width="22" height="22" alt="">Уйти в дзен</a><?php if($user):?><div><?=esc(['admin'=>'Режим разработки','lawyer'=>'Юрист','photographer'=>'Фотограф'][$user['role']])?> · <?=esc($user['login'])?> · <a href="?view=users"><?=$accounts->manager($user)?'Пользователи и пароли':'Мой пароль'?></a> · <a href="./">Запросы</a> <form method="post"><?=token()?><button name="action" value="logout" class="text-button">Выйти ↗</button></form></div><?php endif?></header>
 <main><?php if(($_GET['view']??'')!=='users'):?><h1>Запросы по фотографиям</h1><?php endif?>
 <?php if($err):?><div class="notice error" role="alert"><?=esc($err)?><?php if($draft):?><p>Текст оставлен в форме. Файлы нужно выбрать повторно. При конфликте сначала скопируй текст, затем обнови страницу.</p><?php endif?></div><?php endif?>
@@ -172,12 +175,12 @@ if(($_GET['view']??'')==='users' || str_starts_with((string)($_POST['action']??'
     \HuntaAccess\render($accounts,$user['login'],token());echo '</main></body></html>';exit;
 }
 $filter=in_array($_GET['filter']??'',['all','open','pending','ready','closed'],true)?$_GET['filter']:'all';$search=mb_substr(trim((string)($_GET['q']??'')),0,300);$page=max(1,(int)($_GET['page']??1));$selected=(int)($_GET['id']??0);
-$counts=$db->query('SELECT COUNT(*) total,COALESCE(SUM(closed=0),0) opened,COALESCE(SUM(closed=0 AND ready=0),0) pending,COALESCE(SUM(closed=0 AND ready=1),0) ready,COALESCE(SUM(closed=1),0) closed FROM cases')->fetch();
+$counts=$db->query('SELECT COUNT(*) total,COALESCE(SUM(closed=0),0) opened,COALESCE(SUM(closed=0 AND ready=0),0) pending,COALESCE(SUM(closed=0 AND ready=1),0) ready,COALESCE(SUM(closed=1),0) closed FROM cases WHERE deleted_at IS NULL')->fetch();
 ?><div class="toolbar"><form method="get" class="search"><input type="hidden" name="filter" value="<?=esc($filter)?>"><input name="q" value="<?=esc($search)?>" placeholder="ID, компания или текст" aria-label="Поиск"><button>Найти</button></form><nav class="filters"><?php foreach(['all'=>['Все','total'],'open'=>['Открытые','opened'],'pending'=>['Без ответа','pending'],'ready'=>['Ответ готов','ready'],'closed'=>['Закрытые','closed']] as $key=>[$label,$counter]):?><a class="button <?=$filter===$key?'active':''?>" href="?<?=esc(http_build_query(['filter'=>$key,'q'=>$search]))?>"><?=esc($label)?> <span><?=(int)$counts[$counter]?></span></a><?php endforeach?></nav><?php if(permitted($user['role'],'request')):?><button class="primary" data-new>＋ Новый запрос</button><?php endif?></div>
 <p class="legend">Галочка фотографа — ответ готов. Галочка юриста — вся позиция закрыта.</p>
 <?php if(permitted($user['role'],'request')):?><details class="new panel" id="new-case" <?=($draft && !$draftId)?'open':''?>><summary>Добавить запрос</summary><form method="post" enctype="multipart/form-data" data-upload><?=form_context()?><input type="hidden" name="action" value="create"><div class="fields"><label>Название<input name="title" maxlength="200" value="<?=esc(!$draftId?($draft['title']??''):'')?>" required></label><label>Компания<input name="company" maxlength="300" value="<?=esc(!$draftId?($draft['company']??''):'')?>"></label></div><label>Ссылка на источник<input type="url" name="source_url" value="<?=esc(!$draftId?($draft['source_url']??''):'')?>" placeholder="https://stock.adobe.com/…"></label><label>Запрос<textarea name="request_note" maxlength="20000"><?=esc(!$draftId?($draft['request_note']??''):'')?></textarea></label><label class="upload">＋ Фотографии или документы<input type="file" name="request[]" multiple></label><div class="local-previews"></div><button class="primary">Создать запрос</button></form></details><?php endif?>
 <?php
-$where=[];$params=[];if($filter==='open')$where[]='closed=0';if($filter==='pending')$where[]='closed=0 AND ready=0';if($filter==='ready')$where[]='closed=0 AND ready=1';if($filter==='closed')$where[]='closed=1';
+$where=['deleted_at IS NULL'];$params=[];if($filter==='open')$where[]='closed=0';if($filter==='pending')$where[]='closed=0 AND ready=0';if($filter==='ready')$where[]='closed=0 AND ready=1';if($filter==='closed')$where[]='closed=1';
 if($search!==''){$where[]="(CAST(id AS TEXT)=? OR title LIKE ? ESCAPE '\\' OR company LIKE ? ESCAPE '\\' OR request_note LIKE ? ESCAPE '\\' OR response_note LIKE ? ESCAPE '\\' OR source_url LIKE ? ESCAPE '\\')";$like='%'.str_replace(['\\','%','_'],['\\\\','\\%','\\_'],$search).'%';$params=[$search,$like,$like,$like,$like,$like];}
 $sql=$where?' WHERE '.implode(' AND ',$where):'';$q=$db->prepare('SELECT COUNT(*) FROM cases'.$sql);$q->execute($params);$total=(int)$q->fetchColumn();$pages=max(1,(int)ceil($total/20));$page=min($page,$pages);
 $q=$db->prepare('SELECT * FROM cases'.$sql.' ORDER BY id DESC LIMIT 20 OFFSET '.(($page-1)*20));$q->execute($params);$rows=$q->fetchAll();
@@ -196,6 +199,7 @@ $req=permitted($user['role'],'request');$resp=permitted($user['role'],'response'
 <section class="panel"><h2>Ответ фотографа</h2><?php attachments($db,$id,'response',$resp,$row,$storage);?>
 <?php if($resp):?><form method="post" enctype="multipart/form-data" data-upload><?=form_context($display)?><input type="hidden" name="action" value="save"><label class="upload">＋ Файлы · можно вставить фото Ctrl+V<input type="file" name="response[]" multiple></label><div class="local-previews"></div><label>Заметка<textarea name="response_note" maxlength="20000" placeholder="Пояснение к ответу…"><?=esc($display['response_note'])?></textarea></label><button class="primary">Сохранить ответ</button></form><?php else:?><p class="note"><?=nl2br(esc($row['response_note']?:'Ответ пока не добавлен.'))?></p><?php endif?></section>
 <details class="history"><summary>История изменений · Обновлено <?=esc(date('d.m.Y H:i',strtotime($row['updated_at'])))?></summary><?php $events=$db->prepare('SELECT * FROM events WHERE case_id=? ORDER BY id DESC LIMIT 50');$events->execute([$id]);foreach($events as $event):?><p><?=esc(date('d.m H:i',strtotime($event['created_at'])))?> · <?=esc($event['actor'])?> · <?=esc($event['action'])?></p><?php endforeach?></details>
+<?php if($req):?><details class="delete-request"><summary>Удалить запрос</summary><form method="post" data-delete-case data-case-id="<?=$id?>"><?=form_context($row)?><input type="hidden" name="action" value="delete_case"><p>Запрос и его файлы станут недоступны в кабинете. Для подтверждения впиши <strong>удалить</strong>.</p><label>Подтверждение<input type="text" name="delete_word" required pattern="[Уу][Дд][Аа][Лл][Ии][Тт][Ьь]" autocomplete="off" spellcheck="false" placeholder="удалить"></label><button class="delete-case-button">Удалить запрос № <?=$id?></button></form></details><?php endif?>
 </div></section>
 <?php endforeach?>
 <nav class="pagination" aria-label="Страницы"><?php if($page>1):?><a class="button" href="?<?=esc(http_build_query(['filter'=>$filter,'q'=>$search,'page'=>$page-1]))?>">← Назад</a><?php endif?><span>Найдено: <?=$total?> · Страница <?=$page?> из <?=$pages?></span><?php if($page<$pages):?><a class="button" href="?<?=esc(http_build_query(['filter'=>$filter,'q'=>$search,'page'=>$page+1]))?>">Далее →</a><?php endif?></nav>

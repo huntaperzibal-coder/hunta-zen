@@ -9,7 +9,7 @@ function connect(string $storage): \PDO {
 }
 function schema(\PDO $db): void {
     $db->exec("CREATE TABLE IF NOT EXISTS users(login TEXT PRIMARY KEY,password_hash TEXT NOT NULL,role TEXT NOT NULL CHECK(role IN ('admin','photographer','lawyer')));
-    CREATE TABLE IF NOT EXISTS cases(id INTEGER PRIMARY KEY AUTOINCREMENT,title TEXT NOT NULL,company TEXT NOT NULL DEFAULT '',request_note TEXT NOT NULL DEFAULT '',created_by TEXT NOT NULL DEFAULT '',response_note TEXT NOT NULL DEFAULT '',source_url TEXT NOT NULL DEFAULT '',source_title TEXT NOT NULL DEFAULT '',preview_key TEXT,ready INTEGER NOT NULL DEFAULT 0,closed INTEGER NOT NULL DEFAULT 0,revision INTEGER NOT NULL DEFAULT 1,created_at TEXT NOT NULL,updated_at TEXT NOT NULL);
+    CREATE TABLE IF NOT EXISTS cases(id INTEGER PRIMARY KEY AUTOINCREMENT,title TEXT NOT NULL,company TEXT NOT NULL DEFAULT '',request_note TEXT NOT NULL DEFAULT '',created_by TEXT NOT NULL DEFAULT '',deleted_at TEXT,response_note TEXT NOT NULL DEFAULT '',source_url TEXT NOT NULL DEFAULT '',source_title TEXT NOT NULL DEFAULT '',preview_key TEXT,ready INTEGER NOT NULL DEFAULT 0,closed INTEGER NOT NULL DEFAULT 0,revision INTEGER NOT NULL DEFAULT 1,created_at TEXT NOT NULL,updated_at TEXT NOT NULL);
     CREATE TABLE IF NOT EXISTS attachments(id INTEGER PRIMARY KEY AUTOINCREMENT,case_id INTEGER NOT NULL REFERENCES cases(id),side TEXT NOT NULL CHECK(side IN ('request','response')),name TEXT NOT NULL,mime TEXT NOT NULL,size INTEGER NOT NULL,storage_key TEXT NOT NULL UNIQUE,created_at TEXT NOT NULL);
     CREATE TABLE IF NOT EXISTS events(id INTEGER PRIMARY KEY AUTOINCREMENT,case_id INTEGER NOT NULL REFERENCES cases(id),actor TEXT NOT NULL,action TEXT NOT NULL,created_at TEXT NOT NULL);
     CREATE TABLE IF NOT EXISTS attempts(key_hash TEXT NOT NULL,created_at INTEGER NOT NULL);
@@ -18,6 +18,7 @@ function schema(\PDO $db): void {
     CREATE INDEX IF NOT EXISTS attachments_case ON attachments(case_id);
     CREATE INDEX IF NOT EXISTS attempts_time ON attempts(created_at);");
     $columns=$db->query('PRAGMA table_info(cases)')->fetchAll();
+    if(!in_array('deleted_at',array_column($columns,'name'),true))$db->exec('ALTER TABLE cases ADD COLUMN deleted_at TEXT');
     if(!in_array('created_by',array_column($columns,'name'),true)){
         $db->exec('SAVEPOINT desk_request_author');
         try{
@@ -41,7 +42,7 @@ function request_author_badge(array $row): string {
     return '<span class="requester-badge requester-'.$author['color'].'" title="'.esc($author['title']).'" aria-label="'.esc($author['title']).'">'.esc($author['initial']).'</span>';
 }
 function record(\PDO $db,int $id): array {
-    $q=$db->prepare('SELECT * FROM cases WHERE id=?');$q->execute([$id]);$row=$q->fetch();
+    $q=$db->prepare('SELECT * FROM cases WHERE id=? AND deleted_at IS NULL');$q->execute([$id]);$row=$q->fetch();
     if (!$row) throw new \RuntimeException('Позиция не найдена.'); return $row;
 }
 function permitted(string $role,string $side): bool { return $role==='admin' || ($side==='request' && $role==='lawyer') || ($side==='response' && $role==='photographer'); }
@@ -94,6 +95,19 @@ function save(\PDO $db,?int $id,int $revision,array $input,string $role,string $
         }
         event($db,$id,$actor,$new?'Запрос создан':'Позиция сохранена'.($old['ready']!==$values['ready']?' · Ответ '.($values['ready']?'готов':'не готов'):'').($old['closed']!==$values['closed']?' · '.($values['closed']?'Закрыта':'Открыта'):''));
         $db->commit();return $id;
+    }catch(\Throwable $e){$db->rollBack();throw $e;}
+}
+/** Remove from the cabinet, retaining original bytes and audit history for recovery. */
+function delete_case(\PDO $db,int $id,int $revision,string $role,string $actor,string $word): void {
+    if(!permitted($role,'request'))throw new \RuntimeException('Удалить запрос может юрист или владелец кабинета.');
+    if(mb_strtolower(trim($word),'UTF-8')!=='удалить')throw new \RuntimeException('Для удаления впиши слово «удалить».');
+    $db->beginTransaction();
+    try{
+        $row=record($db,$id);
+        if((int)$row['revision']!==$revision)throw new \RuntimeException('Запрос изменился. Обнови страницу и проверь его перед удалением.');
+        $stamp=date('c');$q=$db->prepare('UPDATE cases SET deleted_at=?,updated_at=?,revision=revision+1 WHERE id=? AND revision=? AND deleted_at IS NULL');$q->execute([$stamp,$stamp,$id,$revision]);
+        if(!$q->rowCount())throw new \RuntimeException('Запрос изменился. Удаление не выполнено.');
+        event($db,$id,$actor,'Запрос удалён');$db->commit();
     }catch(\Throwable $e){$db->rollBack();throw $e;}
 }
 function upload(array $group,string $side,string $storage): array {

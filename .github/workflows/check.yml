@@ -22,6 +22,7 @@ jobs:
       - run: python3 tests/photo_desk_http.py
       - run: python3 tests/photo_desk_install.py
       - run: node --check photo-desk/public/desk.js
+      - run: node tests/photo_desk_delete.cjs
       - run: php tests/core.php
       - run: php tests/video.php
       - run: php tests/reader_images.php

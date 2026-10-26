@@ -69,3 +69,13 @@ document.querySelectorAll('[data-metadata]').forEach(link=>link.addEventListener
 metadataViewer?.querySelector('button').addEventListener('click',()=>metadataViewer.close());
 metadataViewer?.addEventListener('click',event=>{if(event.target===metadataViewer)metadataViewer.close();});
 metadataViewer?.addEventListener('close',()=>metadataRequest?.abort());
+
+// Native validation checks the typed word before the final confirmation opens.
+document.querySelectorAll('form[data-delete-case]').forEach(form=>form.addEventListener('submit',event=>{
+  const word=form.elements.delete_word.value.trim().toLocaleLowerCase('ru');
+  if(word!=='удалить'){event.preventDefault();form.elements.delete_word.setCustomValidity('Впиши слово «удалить».');form.elements.delete_word.reportValidity();return;}
+  const warning=dirty.size?' Несохранённые изменения на странице будут потеряны.':'';
+  if(!confirm('Удалить запрос № '+form.dataset.caseId+' вместе с доступом к его файлам?'+warning)){event.preventDefault();return;}
+  dirty.clear();
+}));
+document.querySelectorAll('[name=delete_word]').forEach(input=>input.addEventListener('input',()=>input.setCustomValidity('')));
