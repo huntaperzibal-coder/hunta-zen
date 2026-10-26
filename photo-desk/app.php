@@ -9,7 +9,7 @@ function connect(string $storage): \PDO {
 }
 function schema(\PDO $db): void {
     $db->exec("CREATE TABLE IF NOT EXISTS users(login TEXT PRIMARY KEY,password_hash TEXT NOT NULL,role TEXT NOT NULL CHECK(role IN ('admin','photographer','lawyer')));
-    CREATE TABLE IF NOT EXISTS cases(id INTEGER PRIMARY KEY AUTOINCREMENT,title TEXT NOT NULL,company TEXT NOT NULL DEFAULT '',request_note TEXT NOT NULL DEFAULT '',response_note TEXT NOT NULL DEFAULT '',source_url TEXT NOT NULL DEFAULT '',source_title TEXT NOT NULL DEFAULT '',preview_key TEXT,ready INTEGER NOT NULL DEFAULT 0,closed INTEGER NOT NULL DEFAULT 0,revision INTEGER NOT NULL DEFAULT 1,created_at TEXT NOT NULL,updated_at TEXT NOT NULL);
+    CREATE TABLE IF NOT EXISTS cases(id INTEGER PRIMARY KEY AUTOINCREMENT,title TEXT NOT NULL,company TEXT NOT NULL DEFAULT '',request_note TEXT NOT NULL DEFAULT '',created_by TEXT NOT NULL DEFAULT '',response_note TEXT NOT NULL DEFAULT '',source_url TEXT NOT NULL DEFAULT '',source_title TEXT NOT NULL DEFAULT '',preview_key TEXT,ready INTEGER NOT NULL DEFAULT 0,closed INTEGER NOT NULL DEFAULT 0,revision INTEGER NOT NULL DEFAULT 1,created_at TEXT NOT NULL,updated_at TEXT NOT NULL);
     CREATE TABLE IF NOT EXISTS attachments(id INTEGER PRIMARY KEY AUTOINCREMENT,case_id INTEGER NOT NULL REFERENCES cases(id),side TEXT NOT NULL CHECK(side IN ('request','response')),name TEXT NOT NULL,mime TEXT NOT NULL,size INTEGER NOT NULL,storage_key TEXT NOT NULL UNIQUE,created_at TEXT NOT NULL);
     CREATE TABLE IF NOT EXISTS events(id INTEGER PRIMARY KEY AUTOINCREMENT,case_id INTEGER NOT NULL REFERENCES cases(id),actor TEXT NOT NULL,action TEXT NOT NULL,created_at TEXT NOT NULL);
     CREATE TABLE IF NOT EXISTS attempts(key_hash TEXT NOT NULL,created_at INTEGER NOT NULL);
@@ -17,6 +17,28 @@ function schema(\PDO $db): void {
     INSERT OR IGNORE INTO user_access(login,role) SELECT login,role FROM users;
     CREATE INDEX IF NOT EXISTS attachments_case ON attachments(case_id);
     CREATE INDEX IF NOT EXISTS attempts_time ON attempts(created_at);");
+    $columns=$db->query('PRAGMA table_info(cases)')->fetchAll();
+    if(!in_array('created_by',array_column($columns,'name'),true)){
+        $db->exec('SAVEPOINT desk_request_author');
+        try{
+            $db->exec("ALTER TABLE cases ADD COLUMN created_by TEXT NOT NULL DEFAULT ''");
+            // Recover the creator, never the last editor, from the existing audit trail.
+            $db->exec("UPDATE cases SET created_by=COALESCE((SELECT actor FROM events WHERE events.case_id=cases.id AND action='Запрос создан' ORDER BY id LIMIT 1),'')");
+            $db->exec('RELEASE SAVEPOINT desk_request_author');
+        }catch(\Throwable $e){$db->exec('ROLLBACK TO SAVEPOINT desk_request_author');$db->exec('RELEASE SAVEPOINT desk_request_author');throw $e;}
+    }
+}
+function request_author(array $row): array {
+    $login=trim((string)($row['created_by']??''));$key=mb_strtolower($login,'UTF-8');
+    return match($key){
+        'katya','катя','ekaterina','екатерина'=>['title'=>'Запрос Кати','initial'=>'К','color'=>'katya'],
+        'valera','валера','valeriy','валерий'=>['title'=>'Запрос Валеры','initial'=>'В','color'=>'valera'],
+        default=>['title'=>$login!==''?'Запрос · '.$login:'Запрос юриста','initial'=>mb_strtoupper(mb_substr($login,0,1,'UTF-8'),'UTF-8'),'color'=>'other']
+    };
+}
+function request_author_badge(array $row): string {
+    $author=request_author($row);if($author['initial']==='')return '';
+    return '<span class="requester-badge requester-'.$author['color'].'" title="'.esc($author['title']).'" aria-label="'.esc($author['title']).'">'.esc($author['initial']).'</span>';
 }
 function record(\PDO $db,int $id): array {
     $q=$db->prepare('SELECT * FROM cases WHERE id=?');$q->execute([$id]);$row=$q->fetch();
@@ -55,7 +77,7 @@ function save(\PDO $db,?int $id,int $revision,array $input,string $role,string $
         }
         $stamp=date('c');
         if($new) {
-            $db->prepare('INSERT INTO cases(title,company,request_note,response_note,source_url,ready,closed,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?)')->execute([$values['title'],$values['company'],$values['request_note'],$values['response_note']??'',$values['source_url'],$values['ready'],$values['closed'],$stamp,$stamp]);$id=(int)$db->lastInsertId();
+            $db->prepare('INSERT INTO cases(title,company,request_note,response_note,source_url,ready,closed,created_at,updated_at,created_by) VALUES(?,?,?,?,?,?,?,?,?,?)')->execute([$values['title'],$values['company'],$values['request_note'],$values['response_note']??'',$values['source_url'],$values['ready'],$values['closed'],$stamp,$stamp,$actor]);$id=(int)$db->lastInsertId();
         } else {
             $db->prepare('UPDATE cases SET title=?,company=?,request_note=?,response_note=?,source_url=?,ready=?,closed=?,revision=revision+1,updated_at=? WHERE id=?')->execute([$values['title'],$values['company'],$values['request_note'],$values['response_note'],$values['source_url'],$values['ready'],$values['closed'],$stamp,$id]);
             if($old['source_url']!==$values['source_url'])$db->prepare("UPDATE cases SET source_title='',preview_key=NULL WHERE id=?")->execute([$id]);

@@ -6,7 +6,7 @@ with tempfile.TemporaryDirectory(prefix='photo-desk-') as tmp:
     for folder in ('files','thumbs','sessions','backups'): (store/folder).mkdir()
     config=store/'config.php'
     config.write_text('<?php return '+"['storage'=>"+repr(str(store))+",'url'=>'https://files.example.test'];")
-    seed='require '+repr(str(root/'photo-desk/app.php'))+'; $db=PhotoDesk\\connect('+repr(str(store))+'); PhotoDesk\\schema($db); foreach(["owner"=>"admin","lawyer"=>"lawyer","photo"=>"photographer"] as $login=>$role){$db->prepare("INSERT INTO users VALUES(?,?,?)")->execute([$login,password_hash("test",PASSWORD_DEFAULT),$role]);}'
+    seed='require '+repr(str(root/'photo-desk/app.php'))+'; $db=PhotoDesk\\connect('+repr(str(store))+'); PhotoDesk\\schema($db); foreach(["owner"=>"admin","lawyer"=>"lawyer","photo"=>"photographer","katya"=>"lawyer","valera"=>"lawyer"] as $login=>$role){$db->prepare("INSERT INTO users VALUES(?,?,?)")->execute([$login,password_hash("test",PASSWORD_DEFAULT),$role]);}'
     subprocess.run(['php','-r',seed],check=True)
     sock=socket.socket();sock.bind(('127.0.0.1',0));port=sock.getsockname()[1];sock.close()
     env=os.environ|{'PHOTO_DESK_CONFIG':str(config)}
@@ -221,6 +221,20 @@ with tempfile.TemporaryDirectory(prefix='photo-desk-') as tmp:
             report=req(photo,f'?file={cid}&metadata=1&download=1')[1]
             assert b'RAW EOS TEST' in report and b'X-T2' not in report
             assert req(owner,f'?file={cid}&download=1')[1]==cr2
+        # Creator is authenticated identity; shared visibility and editing remain unchanged.
+        katya=client();valera=client();login(katya,'katya');login(valera,'valera')
+        assert post(katya,{'csrf':csrf(katya),'action':'create','title':'Карточка Кати','created_by':'valera'})[0]==200
+        kid=db.execute("SELECT id FROM cases WHERE title='Карточка Кати'").fetchone()[0]
+        assert db.execute('SELECT created_by FROM cases WHERE id=?',[kid]).fetchone()[0]=='katya'
+        assert post(valera,{'csrf':csrf(valera),'action':'create','title':'Карточка Валеры'})[0]==200
+        for reader in (owner,photo,lawyer,katya,valera):
+            page=req(reader)[1].decode()
+            assert 'Запрос Кати' in page and 'Запрос Валеры' in page,'all users still see both lawyers'
+            assert 'requester-badge requester-katya' in page and 'requester-badge requester-valera' in page
+            assert 'name="created_by"' not in page and 'name="requester"' not in page,'no author selection needed'
+        krev=db.execute('SELECT revision FROM cases WHERE id=?',[kid]).fetchone()[0]
+        assert post(valera,{'csrf':csrf(valera),'action':'save','id':kid,'revision':krev,'request_note':'Общая работа','created_by':'valera'})[0]==200
+        assert db.execute('SELECT created_by FROM cases WHERE id=?',[kid]).fetchone()[0]=='katya','another lawyer edit keeps author'
         print('Photo desk HTTP checks passed')
     finally:
         server.terminate();server.wait(timeout=5);log.close()
