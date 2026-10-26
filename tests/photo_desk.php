@@ -27,6 +27,7 @@ rejects(fn()=>PhotoDesk\public_fetch('https://user:pass@example.org',100));
 $katya=save($db,null,0,['title'=>'От Кати','created_by'=>'valera'],'lawyer','katya');
 check(record($db,$katya)['created_by']==='katya','Authenticated creator overrides forged form author');
 check(PhotoDesk\request_author(record($db,$katya))['title']==='Запрос Кати','Katya heading');
+check(PhotoDesk\request_author(['created_by'=>'Katja'])===PhotoDesk\request_author(['created_by'=>'katya']),'Actual Katja login gets Katya blue badge and heading');
 save($db,$katya,1,['request_note'=>'Поправил Валера','created_by'=>'valera'],'lawyer','valera');
 save($db,$katya,2,['response_note'=>'Отвечает фотограф'],'photographer','photo');
 check(record($db,$katya)['created_by']==='katya','Other editors cannot become the creator');

@@ -32,7 +32,7 @@ function schema(\PDO $db): void {
 function request_author(array $row): array {
     $login=trim((string)($row['created_by']??''));$key=mb_strtolower($login,'UTF-8');
     return match($key){
-        'katya','катя','ekaterina','екатерина'=>['title'=>'Запрос Кати','initial'=>'К','color'=>'katya'],
+        'katya','katja','катя','ekaterina','екатерина'=>['title'=>'Запрос Кати','initial'=>'К','color'=>'katya'],
         'valera','валера','valeriy','валерий'=>['title'=>'Запрос Валеры','initial'=>'В','color'=>'valera'],
         default=>['title'=>$login!==''?'Запрос · '.$login:'Запрос юриста','initial'=>mb_strtoupper(mb_substr($login,0,1,'UTF-8'),'UTF-8'),'color'=>'other']
     };
