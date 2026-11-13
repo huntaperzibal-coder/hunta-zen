@@ -7,16 +7,12 @@ function github_command_card(string $title,string $where,string $description,str
 function github_page(): void {
     $root=(string)realpath(ROOT);$php='/usr/local/bin/php8.2';
     $cd='cd '.escapeshellarg($root).' && ';
-    $ssh='ssh -p 22 altaikemp_zen@altaikemp.beget.tech';
+    $ssh='ssh -p 22 altaikemp@altaikemp.beget.tech';
     echo '<h1>GitHub</h1><p><a class="btn-secondary" href="https://github.com/huntaperzibal-coder/hunta-zen" target="_blank" rel="noopener">Открыть репозиторий</a></p>';
     echo '<div class="github-primary">';
     github_command_card('Вход на сервер','','',$ssh);
     github_command_card('Обновление Git','','','bash /home/a/altaikemp/hunta-zen.ru/zen-sync.sh');
     echo '</div>';
-    github_command_card('Состояние Git','НА СЕРВЕРЕ','Показывает локальные изменения и последние пять коммитов. Ничего не меняет.',$cd.'git status --short && git log -5 --oneline');
-    github_command_card('Копия базы на сервере','НА СЕРВЕРЕ','Отдельный согласованный снимок SQLite с проверкой целостности. Каталог: '.database_backup_directory().'. Он находится вне репозитория и public_html. Старые копии сохраняются.',$cd.$php.' tools/backup_database.php');
-    github_command_card('Посмотреть копии базы','НА СЕРВЕРЕ','Последние 20 снимков, их имена и размеры.',$cd.$php.' tools/backup_database.php --list');
-    github_command_card('Полная копия данных на сервере','НА СЕРВЕРЕ','Существующая команда: база, фотографии и видео в storage/backups. Пароли и токены сохраняй отдельно.',$cd.$php.' tools/backup.php');
     $remote=$php.' '.escapeshellarg($root.'/tools/backup_database.php').' --download';
     $download=<<<'SHELL'
 (
@@ -45,6 +41,11 @@ printf 'Копия базы сохранена: %s\n' "$zen_backup_file"
 )
 SHELL;
     $download=str_replace(['__SSH__','__REMOTE__'],[$ssh,escapeshellarg($remote)],$download);
+    ob_start();
+    github_command_card('Состояние Git','НА СЕРВЕРЕ','Показывает локальные изменения и последние пять коммитов. Ничего не меняет.',$cd.'git status --short && git log -5 --oneline');
+    github_command_card('Копия базы на сервере','НА СЕРВЕРЕ','Отдельный согласованный снимок SQLite с проверкой целостности. Каталог: '.database_backup_directory().'. Он находится вне репозитория и public_html. Старые копии сохраняются.',$cd.$php.' tools/backup_database.php');
+    github_command_card('Посмотреть копии базы','НА СЕРВЕРЕ','Последние 20 снимков, их имена и размеры.',$cd.$php.' tools/backup_database.php --list');
+    github_command_card('Полная копия данных на сервере','НА СЕРВЕРЕ','Существующая команда: база, фотографии и видео в storage/backups. Пароли и токены сохраняй отдельно.',$cd.$php.' tools/backup.php');
     github_command_card('Полный архив сайта на сервере','НА СЕРВЕРЕ','Код, согласованная база, фотографии, видео, остальные материалы и настройки. Сохраняется в '.database_backup_directory().'. Старые бэкапы, история Git и журналы внутрь не включаются.',$cd.$php.' tools/backup_site.php');
     $fullRemote=$php.' '.escapeshellarg($root.'/tools/backup_site.php').' --download';
     $fullDownload=<<<'SHELL'
@@ -110,8 +111,11 @@ printf 'Полный сайт сохранён: %s\n' "$zen_archive_file"
 )
 SHELL;
     $fullDownload=str_replace(['__SSH__','__REMOTE__'],[$ssh,escapeshellarg($fullRemote)],$fullDownload);
-    github_command_card('Скачать ВЕСЬ САЙТ на компьютер','НА КОМПЬЮТЕРЕ','Основная команда для полной копии. Архив .tar.gz попадёт в ~/hunta-zen-backups. Внутри: код, база, фото, видео, все приватные материалы и настройки. Проверяются SHA-256 файлов и SQLite. Нужны SSH и Python 3; пароль вводится в терминале.',$fullDownload);
-    github_command_card('Скачать базу на компьютер','НА КОМПЬЮТЕРЕ','Запускай в домашнем терминале, а не после входа по SSH. Команда создаёт новую проверенную копию на сервере, скачивает её в ~/hunta-zen-backups и проверяет SQLite через Python 3. Рабочая база не копируется напрямую.',$download);
-    github_command_card('Проверить планировщик Telegram','НА СЕРВЕРЕ','Состояние очереди, последнего запуска и связь с ботом. Посты не отправляются.',$cd.$php.' tools/telegram_diagnose.php');
-    echo '<p class="hint">Полный архив содержит также пароли и токены. Храни его приватно. Скачанная база содержит черновики, личные сообщения и настройки. Храни её у себя. Облачный Backblaze B2 здесь пока не подключён; настройки другого проекта не используются.</p><script src="/assets/js/github-hub.js?v=1" defer></script>';
+    github_command_card('Скачать базу на компьютер','НА КОМПЬЮТЕРЕ','Команда проверяет целостность SQLite после скачивания.',$download);
+    github_command_card('Проверить планировщик Telegram','НА СЕРВЕРЕ','Состояние очереди и связь с ботом.',$cd.$php.' tools/telegram_diagnose.php');
+    $maintenance = ob_get_clean();
+    echo '<div class="github-backups"><section class="github-backup-card"><h2>Синхронизация с Selectel</h2><p>Отправка в Selectel из админки Дзен пока не подключена.</p><a class="btn-secondary" href="/admin.php?view=service">Резервные копии и журнал</a></section>';
+    echo '<section class="github-backup-card"><h2>Резервная копия на компьютер</h2><p>Код сайта, база, фотографии, видео и настройки.</p><details><summary class="btn-secondary">Скачать резервную копию</summary>';
+    github_command_card('Команда для скачивания','НА КОМПЬЮТЕРЕ','Скопируй команду в терминал. Архив сохранится в ~/hunta-zen-backups после проверки.',$fullDownload);
+    echo '</details></section></div><details class="github-maintenance"><summary>Служебные команды</summary>'.$maintenance.'</details><script src="/assets/js/github-hub.js?v=2" defer></script>';
 }
