@@ -24,6 +24,36 @@ if ($_SERVER['REQUEST_METHOD']==='POST') {
     } else {
         guard();
         try {
+            if ($action === 'download_blog_backup') {
+                session_write_close();
+                $archive = tmpfile();
+                if (!$archive) throw new RuntimeException('Не удалось открыть временный файл архива.');
+                try {
+                    $input = json_encode([
+                        'root' => realpath(ROOT), 'storage' => $storage,
+                        'config' => $configPath, 'directory' => database_backup_directory(),
+                        'download' => true,
+                    ], JSON_THROW_ON_ERROR);
+                    $process = proc_open(
+                        ['/usr/bin/python3', ROOT.'/tools/site_archive.py'],
+                        [['pipe', 'r'], $archive, ['file', '/dev/null', 'a']],
+                        $pipes
+                    );
+                    if (!is_resource($process)) throw new RuntimeException('Не удалось запустить сборку архива.');
+                    fwrite($pipes[0], $input);
+                    fclose($pipes[0]);
+                    if (proc_close($process) !== 0 || !rewind($archive)) {
+                        throw new RuntimeException('Не удалось собрать резервную копию блога.');
+                    }
+                    header('Content-Type: application/gzip');
+                    header('Content-Disposition: attachment; filename="hunta-zen-'.date('Y-m-d_H-i-s').'.tar.gz"');
+                    header('Content-Length: '.fstat($archive)['size']);
+                    fpassthru($archive);
+                } finally {
+                    fclose($archive);
+                }
+                exit;
+            }
             if(str_starts_with($action,'access_')){
                 $own=blog_accounts()->mutate((string)$_SESSION['user_login'],$action,$_POST);
                 if($own){$_SESSION=[];session_destroy();redirect('/admin.php?view=login&'.($action==='access_password'?'password_changed':'sessions_closed').'=1');}
