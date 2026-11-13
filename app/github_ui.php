@@ -2,7 +2,7 @@
 declare(strict_types=1);
 function github_command_card(string $title,string $where,string $description,string $command): void {
     static $number=0;$id='github-command-'.++$number;
-    echo '<section class="github-command"><div class="github-command-heading"><h2>'.h($title).'</h2><span class="github-command-place">'.h($where).'</span></div><p>'.h($description).'</p><pre id="'.$id.'"><code>'.h($command).'</code></pre><button type="button" class="btn-secondary" data-copy-command="'.$id.'">Скопировать команду</button><span class="github-copy-status" role="status"></span></section>';
+    echo '<section class="github-command"><div class="github-command-heading"><h2>'.h($title).'</h2><span class="github-command-place">'.h($where).'</span></div><p>'.h($description).'</p><pre id="'.$id.'"><code>'.h($command).'</code></pre><button type="button" class="btn-secondary" data-copy-command="'.$id.'">'.h($title==='Вход на сервер'?'Копировать вход':($title==='Обновление Git'?'Копировать обновление':'Скопировать команду')).'</button><span class="github-copy-status" role="status"></span></section>';
 }
 function github_page(): void {
     $root=(string)realpath(ROOT);$php='/usr/local/bin/php8.2';
@@ -10,9 +10,11 @@ function github_page(): void {
     $target=setting('illustrator_ssh_target','altaikemp_zen@vortex.beget.com');
     if(!preg_match('/^[A-Za-z0-9_.-]+@[A-Za-z0-9.-]+$/D',$target))$target='altaikemp_zen@vortex.beget.com';
     $ssh='ssh '.escapeshellarg($target);
-    echo '<h1>GitHub и резервные копии</h1><p>Код хранится в GitHub. Тексты, настройки, фотографии и видео живут на сервере: обновление Git не заменяет их резервную копию.</p><p><a href="https://github.com/huntaperzibal-coder/hunta-zen" target="_blank" rel="noopener">Репозиторий ↗</a> · <a href="https://github.com/huntaperzibal-coder/hunta-zen/actions" target="_blank" rel="noopener">GitHub Actions ↗</a></p>';
-    github_command_card('Войти на сервер','НА КОМПЬЮТЕРЕ','Открой терминал своего компьютера и вставь команду. Пароль вводится в терминале; символы не показываются.',$ssh);
-    github_command_card('Обновить main','НА СЕРВЕРЕ','Сначала проверенная копия базы и всех медиа, затем получение main, миграция и отправка своих коммитов.',$cd.'~/zen-sync.sh');
+    echo '<h1>GitHub</h1><p><a class="btn-secondary" href="https://github.com/huntaperzibal-coder/hunta-zen" target="_blank" rel="noopener">Открыть репозиторий</a></p>';
+    echo '<div class="github-primary">';
+    github_command_card('Вход на сервер','','',$ssh);
+    github_command_card('Обновление Git','','',$cd.'~/zen-sync.sh');
+    echo '</div>';
     github_command_card('Состояние Git','НА СЕРВЕРЕ','Показывает локальные изменения и последние пять коммитов. Ничего не меняет.',$cd.'git status --short && git log -5 --oneline');
     github_command_card('Копия базы на сервере','НА СЕРВЕРЕ','Отдельный согласованный снимок SQLite с проверкой целостности. Каталог: '.database_backup_directory().'. Он находится вне репозитория и public_html. Старые копии сохраняются.',$cd.$php.' tools/backup_database.php');
     github_command_card('Посмотреть копии базы','НА СЕРВЕРЕ','Последние 20 снимков, их имена и размеры.',$cd.$php.' tools/backup_database.php --list');
