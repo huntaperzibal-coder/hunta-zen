@@ -24,35 +24,17 @@ if ($_SERVER['REQUEST_METHOD']==='POST') {
     } else {
         guard();
         try {
-            if ($action === 'download_blog_backup') {
-                session_write_close();
-                $archive = tmpfile();
-                if (!$archive) throw new RuntimeException('Не удалось открыть временный файл архива.');
+            if (in_array($action, ['download_blog_backup', 'selectel_blog_backup'], true)) {
+                require_once __DIR__.'/app/github_backup.php';
                 try {
-                    $input = json_encode([
-                        'root' => realpath(ROOT), 'storage' => $storage,
-                        'config' => $configPath, 'directory' => database_backup_directory(),
-                        'download' => true,
-                    ], JSON_THROW_ON_ERROR);
-                    $process = proc_open(
-                        ['/usr/bin/python3', ROOT.'/tools/site_archive.py'],
-                        [['pipe', 'r'], $archive, ['file', '/dev/null', 'a']],
-                        $pipes
-                    );
-                    if (!is_resource($process)) throw new RuntimeException('Не удалось запустить сборку архива.');
-                    fwrite($pipes[0], $input);
-                    fclose($pipes[0]);
-                    if (proc_close($process) !== 0 || !rewind($archive)) {
-                        throw new RuntimeException('Не удалось собрать резервную копию блога.');
-                    }
-                    header('Content-Type: application/gzip');
-                    header('Content-Disposition: attachment; filename="hunta-zen-'.date('Y-m-d_H-i-s').'.tar.gz"');
-                    header('Content-Length: '.fstat($archive)['size']);
-                    fpassthru($archive);
-                } finally {
-                    fclose($archive);
+                    zen_backup_run($action);
+                    if ($action === 'download_blog_backup') exit;
+                } catch (Throwable $e) {
+                    error_log('Zen backup: '.$e);
+                    $_SESSION['zen_backup_notice'] = $e instanceof RuntimeException && !$e instanceof PDOException
+                        ? $e->getMessage() : 'Не удалось собрать резервную копию блога. Подробности в журнале PHP.';
                 }
-                exit;
+                redirect('/admin.php?view=github');
             }
             if(str_starts_with($action,'access_')){
                 $own=blog_accounts()->mutate((string)$_SESSION['user_login'],$action,$_POST);
