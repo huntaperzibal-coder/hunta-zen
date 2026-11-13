@@ -1,6 +1,6 @@
 <?php
 declare(strict_types=1);
-require dirname(__DIR__).'/app/bootstrap.php';
+require __DIR__.'/app/bootstrap.php';
 header('Content-Type: text/plain; charset=utf-8');header('Cache-Control: no-cache');
 echo "User-agent: *\n";
 if(setting('indexed')!=='1')echo "Disallow: /\n";

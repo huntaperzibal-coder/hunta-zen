@@ -7,11 +7,11 @@ function github_command_card(string $title,string $where,string $description,str
 function github_page(): void {
     $root=(string)realpath(ROOT);$php='/usr/local/bin/php8.2';
     $cd='cd '.escapeshellarg($root).' && ';
-    $ssh='ssh -p 22 altaikemp@altaikemp.beget.tech';
+    $ssh='ssh -p 22 altaikemp_zen@altaikemp.beget.tech';
     echo '<h1>GitHub</h1><p><a class="btn-secondary" href="https://github.com/huntaperzibal-coder/hunta-zen" target="_blank" rel="noopener">Открыть репозиторий</a></p>';
     echo '<div class="github-primary">';
     github_command_card('Вход на сервер','','',$ssh);
-    github_command_card('Обновление Git','','','bash /home/a/altaikemp/hunta-zen.ru/zen-sync.sh');
+    github_command_card('Обновление Git','','',$cd.'git pull --ff-only origin main');
     echo '</div>';
     $remote=$php.' '.escapeshellarg($root.'/tools/backup_database.php').' --download';
     $download=<<<'SHELL'
@@ -94,7 +94,7 @@ with tempfile.TemporaryDirectory(prefix='zen-check-') as check_dir:
                 seen[item.name] = {'size': total, 'sha256': digest.hexdigest()}
         while compressed.read(1024 * 1024):
             pass
-    required = {'site/public/index.php', 'data/blog.sqlite', 'configuration/config.php'}
+    required = {'site/index.php', 'data/blog.sqlite', 'configuration/config.php'}
     if not manifest or not required.issubset(seen) or not database:
         raise SystemExit('Архив неполный')
     for name, expected in manifest['files'].items():

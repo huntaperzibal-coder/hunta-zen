@@ -23,7 +23,7 @@ try{
     check_backup($received->query('PRAGMA integrity_check')->fetchColumn()==='ok'&&$received->query('SELECT body FROM posts')->fetchColumn()==='Поздняя правка','downloaded snapshot restores latest consistent data');$received=null;
     [$exit,$out]=backup_cli('--list');check_backup($exit===0&&str_contains($out,basename($file)),'CLI lists existing snapshots');
     [$exit,$out,$err]=backup_cli('--invalid');check_backup($exit===1&&$out===''&&$err!=='','CLI rejects invalid mode without leaking data');
-    try{database_backup_create(ROOT.'/public/private-copy');throw new LogicException('public backup accepted');}catch(RuntimeException $e){check_backup(!is_dir(ROOT.'/public/private-copy'),'public backup directory rejected before writing');}
+    try{database_backup_create(ROOT.'/private-copy');throw new LogicException('public backup accepted');}catch(RuntimeException $e){check_backup(!is_dir(ROOT.'/private-copy'),'public backup directory rejected before writing');}
 }finally{
     $db=null;
     foreach(glob($dir.'/private-copies/*')?:[] as $file)unlink($file);

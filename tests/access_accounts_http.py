@@ -11,7 +11,7 @@ with tempfile.TemporaryDirectory(prefix='access-http-') as tmp:
     subprocess.run(['php','-r',seed],env=env,check=True)
     sock=socket.socket();sock.bind(('127.0.0.1',0));port=sock.getsockname()[1];sock.close()
     log=open(basepath/'server.log','w+')
-    proc=subprocess.Popen(['php','-S',f'127.0.0.1:{port}','-t',str(root/'public')],env=env,stdout=log,stderr=log)
+    proc=subprocess.Popen(['php','-S',f'127.0.0.1:{port}','-t',str(root)],env=env,stdout=log,stderr=log)
     base=f'http://127.0.0.1:{port}'
     def client():return urllib.request.build_opener(urllib.request.ProxyHandler({}),urllib.request.HTTPCookieProcessor(http.cookiejar.CookieJar()))
     def request(c,scope,data=None,query=''):

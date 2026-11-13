@@ -1,6 +1,6 @@
 <?php
 declare(strict_types=1);
-require dirname(__DIR__).'/app/bootstrap.php';
+require __DIR__.'/app/bootstrap.php';
 header('Cache-Control: no-store'); header('X-Robots-Tag: noindex, nofollow');
 session_open();
 $action=(string)($_POST['action']??''); $view=(string)($_GET['view']??'list'); $error=''; $unsaved=null; $savedRevision=null;

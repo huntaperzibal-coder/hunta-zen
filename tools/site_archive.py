@@ -5,7 +5,7 @@ import hashlib,io,json,os,pathlib,sqlite3,sys,tarfile,tempfile,time
 def build_archive(options):
     root=pathlib.Path(options['root']).resolve();storage=pathlib.Path(options['storage']).resolve()
     config=pathlib.Path(options['config']).resolve();directory=pathlib.Path(options['directory']).resolve()
-    if directory==root/'public' or root/'public' in directory.parents:
+    if directory==root or root in directory.parents:
         raise RuntimeError('Каталог архивов должен быть вне public')
     with tempfile.TemporaryDirectory(prefix='zen-full-') as staging:
         snapshot=pathlib.Path(staging)/'blog.sqlite'
@@ -48,7 +48,7 @@ def build_archive(options):
                             add_file(path,str(pathlib.PurePosixPath(prefix)/relative/name))
                 walk(root,'site');walk(storage,'data',True)
                 add_file(snapshot,'data/blog.sqlite');add_file(config,'configuration/config.php')
-                readme=('Гена и Винни — полная резервная копия\n\nsite/ — код и публичные материалы сайта без истории Git.\ndata/ — приватные данные, фото, видео, настройки и согласованный снимок blog.sqlite.\nconfiguration/config.php — исходный конфиг входа, включая вариант HUNTA_CONFIG.\nbackup-manifest.json — размеры и SHA-256 каждого обычного файла.\n\nСтарые резервные копии, журналы и файлы блокировок исключены.\nАрхив содержит пароли и токены: не публикуйте его.\n\nВосстановление: сначала распаковать в отдельный приватный каталог.\nРазместить site/ в репозитории, data/ в закрытом storage, конфиг — в storage/config.php\nили в HUNTA_CONFIG. Проверить абсолютные пути storage и остальных каталогов в настройках.\nКорень веб-сервера должен указывать только на public/.\nНастроить cron и SSH отдельно; системные настройки хостинга в архив не входят.\nНе заменять рабочую базу без отдельной копии и остановки записи.\n')
+                readme=('Гена и Винни — полная резервная копия\n\nsite/ — код и публичные материалы сайта без истории Git.\ndata/ — приватные данные, фото, видео, настройки и согласованный снимок blog.sqlite.\nconfiguration/config.php — исходный конфиг входа, включая вариант HUNTA_CONFIG.\nbackup-manifest.json — размеры и SHA-256 каждого обычного файла.\n\nСтарые резервные копии, журналы и файлы блокировок исключены.\nАрхив содержит пароли и токены: не публикуйте его.\n\nВосстановление: сначала распаковать в отдельный приватный каталог.\nРазместить site/ в репозитории, data/ в закрытом storage, конфиг — в storage/config.php\nили в HUNTA_CONFIG. Проверить абсолютные пути storage и остальных каталогов в настройках.\nКорень веб-сервера указывает на корень рабочего дерева.\nНастроить cron и SSH отдельно; системные настройки хостинга в архив не входят.\nНе заменять рабочую базу без отдельной копии и остановки записи.\n')
                 for name,data in [('RESTORE.txt',readme.encode()),('backup-manifest.json',json.dumps({'version':1,'files':manifest},ensure_ascii=False).encode())]:
                     info=tarfile.TarInfo(name);info.size=len(data);info.mode=0o600;archive.addfile(info,io.BytesIO(data))
             if output:

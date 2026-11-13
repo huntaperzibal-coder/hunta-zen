@@ -269,7 +269,7 @@ with tempfile.TemporaryDirectory(prefix='photo-desk-') as tmp:
         server.terminate();server.wait(timeout=5);log.close()
     # The same public directory serves the desk on its exact hostname, before blog bootstrap.
     log=open(store/'shared-server.log','w+')
-    shared=subprocess.Popen(['php','-S',f'127.0.0.1:{port}','-t',str(root/'public')],env=env,stdout=log,stderr=log)
+    shared=subprocess.Popen(['php','-S',f'127.0.0.1:{port}','-t',str(root)],env=env,stdout=log,stderr=log)
     try:
         for _ in range(100):
             try:

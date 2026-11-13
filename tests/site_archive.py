@@ -3,9 +3,9 @@ import gzip,hashlib,html,io,json,os,pathlib,re,sqlite3,subprocess,tarfile,tempfi
 ROOT=pathlib.Path(__file__).resolve().parents[1];PHP=os.environ.get('PHP_BIN','php')
 with tempfile.TemporaryDirectory(prefix='zen-site-test-') as tmp:
     folder=pathlib.Path(tmp);site=folder/'site';storage=site/'storage';copies=folder/'server-copies'
-    for path in [site/'public',site/'.git',storage/'photos',storage/'backups/old',storage/'references']:
+    for path in [site,site/'.git',storage/'photos',storage/'backups/old',storage/'references']:
         path.mkdir(parents=True,exist_ok=True)
-    (site/'public/index.php').write_text('<?php echo "Site";');(site/'.git/history').write_text('history excluded')
+    (site/'index.php').write_text('<?php echo "Site";');(site/'.git/history').write_text('history excluded')
     (storage/'photos/photo.png').write_bytes(b'photo-data');(storage/'photos/video.mp4').write_bytes(b'video-data')
     (storage/'references/hero.png').write_bytes(b'reference-data');(storage/'backups/old/blog.sqlite').write_bytes(b'old-backup')
     (storage/'image-cache').mkdir();(storage/'image-cache/derived.webp').write_bytes(b'disposable')
@@ -19,7 +19,7 @@ with tempfile.TemporaryDirectory(prefix='zen-site-test-') as tmp:
     binary=archive_bytes()
     with tarfile.open(fileobj=io.BytesIO(binary),mode='r:gz') as archive:
         names=archive.getnames();manifest=json.load(archive.extractfile('backup-manifest.json'))
-        required=['site/public/index.php','data/photos/photo.png','data/photos/video.mp4','data/references/hero.png','data/illustrator-key','configuration/config.php','data/blog.sqlite','RESTORE.txt']
+        required=['site/index.php','data/photos/photo.png','data/photos/video.mp4','data/references/hero.png','data/illustrator-key','configuration/config.php','data/blog.sqlite','RESTORE.txt']
         assert all(name in names for name in required),names
         assert not any('.git/' in name or '/backups/' in name or '/image-cache/' in name or name.endswith('.log') for name in names)
         for name,item in manifest['files'].items():

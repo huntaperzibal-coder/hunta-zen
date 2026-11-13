@@ -1,6 +1,6 @@
 <?php
 declare(strict_types=1);
-require dirname(__DIR__).'/app/bootstrap.php';
+require __DIR__.'/app/bootstrap.php';
 header('Content-Type: application/json; charset=utf-8');header('Cache-Control: no-store');
 if ($_SERVER['REQUEST_METHOD']!=='POST') { http_response_code(405);header('Allow: POST');echo json_encode(['error'=>'Нужна загрузка файла.']);exit; }
 if (!authenticated()) { http_response_code(401);echo json_encode(['error'=>'Войди в админку заново.']);exit; }

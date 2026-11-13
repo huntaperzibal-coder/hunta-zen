@@ -8,7 +8,7 @@
 *.db
 *.db-wal
 *.db-shm
-/public/uploads/
+/uploads/
 /logs/
 /tmp/
 *.log

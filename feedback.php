@@ -1,6 +1,6 @@
 <?php
 declare(strict_types=1);
-require dirname(__DIR__).'/app/bootstrap.php';
+require __DIR__.'/app/bootstrap.php';
 if(str_starts_with($config['site_url'],'https://')&&($_SERVER['HTTPS']??'')!=='on'&&(int)($_SERVER['SERVER_PORT']??0)!==443&&!in_array($_SERVER['REMOTE_ADDR']??'',['127.0.0.1','::1'],true)){header('Location: '.rtrim($config['site_url'],'/').'/feedback.php',true,303);exit;}
 header('Cache-Control: no-store');session_open();$error='';$enabled=setting('feedback_enabled')==='1'&&reader_legal_ready();
 if($_SERVER['REQUEST_METHOD']==='POST'){

@@ -1,6 +1,6 @@
 <?php
 declare(strict_types=1);
-require dirname(__DIR__).'/app/bootstrap.php';
+require __DIR__.'/app/bootstrap.php';
 $name=(string)($_GET['file']??'');
 if (!preg_match('/^[a-f0-9]{32}\.(jpg|png|webp|mp4)$/D',$name,$m)) { http_response_code(404); exit; }
 // Не публикуем фото из черновиков по известному URL.

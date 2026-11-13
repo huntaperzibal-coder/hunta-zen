@@ -6,7 +6,11 @@ require dirname(__DIR__).'/photo-desk/route.php';
 
 // Основа: принципы PDO/SQLite и единой проверки входа из altai-topo.
 const ROOT = __DIR__ . '/..';
-$configPath = getenv('HUNTA_CONFIG') ?: ROOT . '/storage/config.php';
+$defaultConfig = ROOT . '/storage/config.php';
+if (basename((string)realpath(ROOT)) === 'public_html') {
+    $defaultConfig = dirname((string)realpath(ROOT)) . '/zen-app/storage/config.php';
+}
+$configPath = getenv('HUNTA_CONFIG') ?: $defaultConfig;
 if (!is_file($configPath)) {
     if (PHP_SAPI === 'cli') { throw new RuntimeException('Сначала запусти tools/install.php.'); }
     http_response_code(503);

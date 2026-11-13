@@ -1,2 +1,12 @@
-# Корень домена должен указывать на public/. Этот каталог закрыт от HTTP.
-Require all denied
+Options -Indexes
+DirectoryIndex index.php
+Require all granted
+
+RewriteEngine On
+RewriteRule ^robots\.txt$ robots.php [L]
+RewriteRule ^sitemap\.xml$ sitemap.php [L]
+
+# Internal code and Git metadata are outside the HTTP interface.
+RewriteRule ^(?:app|database|docs|photo-desk|tests|tools)(?:/|$) - [F,L]
+RewriteRule ^(?:AGENTS\.md|README\.md|database\.sql)$ - [F,L]
+RewriteRule (^|/)\.(?!well-known(?:/|$)) - [F,L]

@@ -12,7 +12,7 @@ with tempfile.TemporaryDirectory(prefix='hunta-http-') as tmp:
         sock.bind(('127.0.0.1',0));port=sock.getsockname()[1]
     base=f'http://127.0.0.1:{port}'
     with tempfile.TemporaryFile() as log:
-        server=subprocess.Popen([PHP,'-S',f'127.0.0.1:{port}','-t',str(ROOT/'public')],env=env,stdout=log,stderr=log)
+        server=subprocess.Popen([PHP,'-S',f'127.0.0.1:{port}','-t',str(ROOT)],env=env,stdout=log,stderr=log)
         try:
             jar=http.cookiejar.CookieJar();client=urllib.request.build_opener(urllib.request.HTTPCookieProcessor(jar))
             def request(path, data=None, opener=client, headers=None):

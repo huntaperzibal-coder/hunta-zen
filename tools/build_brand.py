@@ -3,7 +3,7 @@ from pathlib import Path
 from PIL import Image, ImageDraw
 import xml.etree.ElementTree as ET
 ROOT=Path(__file__).resolve().parents[1]
-DEST=ROOT/'public/assets/brand'
+DEST=ROOT/'assets/brand'
 for name in ('dialogue','dao-admin'):
     svg=ET.parse(DEST/f'{name}.svg').getroot()
     fills=[node.attrib['fill'] for node in svg if 'fill' in node.attrib]
@@ -27,5 +27,5 @@ for name in ('dialogue','dao-admin'):
     for size in (32,180,192,512):
         image.resize((size,size),Image.Resampling.LANCZOS).save(DEST/f'{name}-{size}.png')
     image.resize((256,256),Image.Resampling.LANCZOS).save(DEST/f'{name}.ico',format='ICO',sizes=[(16,16),(32,32),(48,48),(64,64)])
-(ROOT/'public/favicon.ico').write_bytes((DEST/'dialogue.ico').read_bytes())
+(ROOT/'favicon.ico').write_bytes((DEST/'dialogue.ico').read_bytes())
 print('Built site and Dao favicons, touch icons, and app icons.')

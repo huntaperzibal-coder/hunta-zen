@@ -9,7 +9,7 @@ function database_backup_create(?string $directory=null): string {
     global $db;
     $directory=$directory??database_backup_directory();
     if($directory===''||$directory[0]!=='/')throw new RuntimeException('Нужен абсолютный путь каталога копий.');
-    $public=realpath(ROOT.'/public');
+    $public=realpath(ROOT);
     $probe=$directory;while(!file_exists($probe)&&dirname($probe)!==$probe)$probe=dirname($probe);
     $resolved=realpath($probe);
     if($resolved===false||($public&&($resolved===$public||str_starts_with($resolved,$public.'/'))))throw new RuntimeException('Копии базы должны находиться вне публичного каталога сайта.');

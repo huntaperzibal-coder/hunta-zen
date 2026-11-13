@@ -45,16 +45,16 @@ jobs:
       - run: python3 tests/illustrator_remote.py
       - run: python3 tests/illustrator_actions_install.py
       - run: python3 -m py_compile tools/illustrator_actions.py
-      - run: node --check public/assets/js/editor-clipboard.js
+      - run: node --check assets/js/editor-clipboard.js
       - run: node tests/editor_clipboard.cjs
-      - run: node --check public/assets/js/reader-services.js
-      - run: node --check public/assets/js/github-hub.js
-      - run: node --check public/assets/js/author-settings.js
-      - run: node --check public/assets/js/video-preview.js
-      - run: node --check public/assets/js/editor.js
+      - run: node --check assets/js/reader-services.js
+      - run: node --check assets/js/github-hub.js
+      - run: node --check assets/js/author-settings.js
+      - run: node --check assets/js/video-preview.js
+      - run: node --check assets/js/editor.js
       - run: node tests/editor_confirm.cjs
-      - run: node --check public/assets/js/illustrator.js
-      - run: node --check public/assets/js/editor-help.js
-      - run: node --check public/assets/js/reader-actions.js
-      - run: node --check public/assets/js/reader-feed.js
-      - run: node --check public/assets/js/reader-theme.js
+      - run: node --check assets/js/illustrator.js
+      - run: node --check assets/js/editor-help.js
+      - run: node --check assets/js/reader-actions.js
+      - run: node --check assets/js/reader-feed.js
+      - run: node --check assets/js/reader-theme.js

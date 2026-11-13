@@ -10,7 +10,7 @@ if(!filter_var($url,FILTER_VALIDATE_URL) || parse_url($url,PHP_URL_SCHEME)!=='ht
 $shared=array_key_exists('shared',$options);
 $target=realpath((string)($options['public']??'/home/a/altaikemp/files.altaikemp.beget.tech/public_html'));
 if(!$shared && (!$target || !is_dir($target) || !is_writable($target)))throw new RuntimeException('Папка сайта недоступна. Укажи --public=/полный/путь/public_html');
-if(!$shared && ($target===realpath($root.'/public') || str_contains((string)$target,'/storage')))throw new RuntimeException('Нельзя устанавливать кабинет в папку блога или данных.');
+if(!$shared && ($target===realpath($root) || str_contains((string)$target,'/storage')))throw new RuntimeException('Нельзя устанавливать кабинет в папку блога или данных.');
 foreach([$storage,$storage.'/files',$storage.'/thumbs',$storage.'/sessions',$storage.'/backups'] as $dir)if(!is_dir($dir) && !mkdir($dir,0700,true))throw new RuntimeException('Не удалось создать '.$dir);
 if(!is_file($configPath)){
     $blogPath=getenv('HUNTA_CONFIG')?:$root.'/storage/config.php';$author=null;

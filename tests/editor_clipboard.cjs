@@ -1,5 +1,5 @@
 const fs=require('node:fs'),vm=require('node:vm'),assert=require('node:assert/strict');
-const scope={window:{}};vm.runInNewContext(fs.readFileSync('public/assets/js/editor-clipboard.js','utf8'),scope);const parse=scope.window.DaoClipboard.fromText;
+const scope={window:{}};vm.runInNewContext(fs.readFileSync('assets/js/editor-clipboard.js','utf8'),scope);const parse=scope.window.DaoClipboard.fromText;
 assert.equal(parse('— Реплика\n— Ответ\n\nПауза\n\n\nЕщё пауза').html,'<p>— Реплика<br>— Ответ</p><p>Пауза</p><p>&nbsp;</p><p>Ещё пауза</p>');
 assert.equal(parse('**Заголовок**\n\n**Жирный** и *курсив*',true).title,'Заголовок');
 assert.equal(parse('**Заголовок**\n\n**Жирный** и *курсив*',true).html,'<p><strong>Жирный</strong> и <em>курсив</em></p>');

@@ -8,7 +8,7 @@ const vm = require('node:vm'), fs = require('node:fs'), assert = require('node:a
     const context = {document: {querySelector: selector => selector === '#editor' ? form : {}},
       window: {addEventListener() {}, ordaConfirm: async (...args) => {calls.push(args); return answer;}},
       location: {hash: ''}, setInterval() {}, setTimeout: fn => fn(), FormData: class {}, console};
-    vm.runInNewContext(fs.readFileSync('public/assets/js/editor.js', 'utf8'), context);
+    vm.runInNewContext(fs.readFileSync('assets/js/editor.js', 'utf8'), context);
     const button = {dataset: {editorConfirm: 'Удалить вариант 19?'}};
     const event = {submitter: button, preventDefault() {this.prevented = true;}};
     await handlers.submit(event); await new Promise(resolve => setImmediate(resolve));
