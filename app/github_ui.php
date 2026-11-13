@@ -7,13 +7,11 @@ function github_command_card(string $title,string $where,string $description,str
 function github_page(): void {
     $root=(string)realpath(ROOT);$php='/usr/local/bin/php8.2';
     $cd='cd '.escapeshellarg($root).' && ';
-    $target=setting('illustrator_ssh_target','altaikemp_zen@vortex.beget.com');
-    if(!preg_match('/^[A-Za-z0-9_.-]+@[A-Za-z0-9.-]+$/D',$target))$target='altaikemp_zen@vortex.beget.com';
-    $ssh='ssh '.escapeshellarg($target);
+    $ssh='ssh -p 22 altaikemp_zen@altaikemp.beget.tech';
     echo '<h1>GitHub</h1><p><a class="btn-secondary" href="https://github.com/huntaperzibal-coder/hunta-zen" target="_blank" rel="noopener">Открыть репозиторий</a></p>';
     echo '<div class="github-primary">';
     github_command_card('Вход на сервер','','',$ssh);
-    github_command_card('Обновление Git','','',$cd.'~/zen-sync.sh');
+    github_command_card('Обновление Git','','','bash /home/a/altaikemp/hunta-zen.ru/zen-sync.sh');
     echo '</div>';
     github_command_card('Состояние Git','НА СЕРВЕРЕ','Показывает локальные изменения и последние пять коммитов. Ничего не меняет.',$cd.'git status --short && git log -5 --oneline');
     github_command_card('Копия базы на сервере','НА СЕРВЕРЕ','Отдельный согласованный снимок SQLite с проверкой целостности. Каталог: '.database_backup_directory().'. Он находится вне репозитория и public_html. Старые копии сохраняются.',$cd.$php.' tools/backup_database.php');
