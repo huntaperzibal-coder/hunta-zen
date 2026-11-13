@@ -5,6 +5,7 @@ function github_command_card(string $title,string $where,string $description,str
     echo '<section class="github-command"><div class="github-command-heading"><h2>'.h($title).'</h2><span class="github-command-place">'.h($where).'</span></div><p>'.h($description).'</p><pre id="'.$id.'"><code>'.h($command).'</code></pre><button type="button" class="btn-secondary" data-copy-command="'.$id.'">'.h($title==='Вход на сервер'?'Копировать вход':($title==='Обновление Git'?'Копировать обновление':'Скопировать команду')).'</button><span class="github-copy-status" role="status"></span></section>';
 }
 function github_page(): void {
+    global $storage;
     $root=(string)realpath(ROOT);$php='/usr/local/bin/php8.2';
     $cd='cd '.escapeshellarg($root).' && ';
     $ssh='ssh -p 22 altaikemp_zen@altaikemp.beget.tech';
@@ -50,7 +51,18 @@ SHELL;
     github_command_card('Скачать базу на компьютер','НА КОМПЬЮТЕРЕ','Команда проверяет целостность SQLite после скачивания.',$download);
     github_command_card('Проверить планировщик Telegram','НА СЕРВЕРЕ','Состояние очереди и связь с ботом.',$cd.$php.' tools/telegram_diagnose.php');
     $maintenance = ob_get_clean();
-    echo '<div class="github-backups"><section class="github-backup-card"><h2>Синхронизация с Selectel</h2><p>Отправка в Selectel из админки Дзен пока не подключена.</p><a class="btn-secondary" href="/admin.php?view=service">Резервные копии и журнал</a></section>';
+    $notice = $_SESSION['zen_backup_notice'] ?? '';
+    unset($_SESSION['zen_backup_notice']);
+    $saved = is_readable($storage.'/zen-selectel.json');
+    echo '<div class="github-backups"><section class="github-backup-card"><h2>Синхронизация с Selectel</h2>';
+    if ($notice !== '') echo '<p role="status">'.h($notice).'</p>';
+    if ($saved) echo '<form method="post">'.csrf().'<button class="btn-main" name="action" value="selectel_blog_backup">Сохранить в Selectel</button></form>';
+    echo '<details'.($saved ? '' : ' open').'><summary>Реквизиты Selectel</summary><form method="post">'.csrf().'
+        <label>Ключ доступа Selectel<input type="password" name="access_key" required></label>
+        <label>Секретный ключ Selectel<input type="password" name="secret_key" required></label>
+        <label>Пароль restic<input type="password" name="backup_password" required></label>
+        <label><input type="checkbox" name="initialize_repository" value="1"> Создать репозиторий при первой настройке</label>
+        <button class="btn-main" name="action" value="selectel_blog_backup">Сохранить в Selectel и запомнить реквизиты</button></form></details></section>';
     echo '<section class="github-backup-card"><h2>Резервная копия на компьютер</h2><p>Записи блога, медиа из публикаций, настройки и код сайта.</p><form method="post">'.csrf().'<button type="submit" class="btn-secondary" name="action" value="download_blog_backup">Скачать резервную копию</button></form>';
     echo '</section></div><details class="github-maintenance"><summary>Служебные команды</summary>'.$maintenance.'</details><script src="/assets/js/github-hub.js?v=2" defer></script>';
 }
