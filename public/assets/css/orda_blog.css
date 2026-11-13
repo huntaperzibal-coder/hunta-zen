@@ -55,3 +55,14 @@
 /* Saved Telegram channels share the existing admin controls. */
 .tg-channel-card{border:1px solid var(--orda-border);border-radius:8px;padding:14px 16px;margin:12px 0;background:var(--orda-bg-content,#fff)}
 .tg-channel-card h3{margin:0 0 8px}.tg-channel-card form{margin:8px 0 0}.tg-channel-statuses{font-size:13px;line-height:1.7;padding-left:20px}
+
+.github-primary .github-command{display:grid;grid-template-columns:minmax(0,1fr) auto;column-gap:16px;align-items:center;background:#121212;border:0;border-radius:8px;padding:14px 16px;margin:0 0 12px}
+.github-primary .github-command-heading{grid-column:1;margin:0}
+.github-primary h2{color:#fff;font-size:14px;margin:0}
+.github-primary .github-command-place:empty,.github-primary p:empty{display:none}
+.github-primary pre{grid-column:1;margin:6px 0 0;padding:0;border:0;background:transparent;color:#00e7bc}
+.github-primary code{color:inherit;background:transparent}
+.github-primary button{grid-column:2;grid-row:1 / span 2}
+.github-primary .github-copy-status{grid-column:1 / -1;color:#fff}
+.github-primary .github-copy-status:empty{display:none}
+@media(max-width:600px){.github-primary .github-command{display:block}.github-primary button{margin-top:10px}}
