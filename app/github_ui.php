@@ -11,7 +11,7 @@ function github_page(): void {
     echo '<h1>GitHub</h1><p><a class="btn-secondary" href="https://github.com/huntaperzibal-coder/hunta-zen" target="_blank" rel="noopener">Открыть репозиторий</a></p>';
     echo '<div class="github-primary">';
     github_command_card('Вход на сервер','','',$ssh);
-    github_command_card('Обновление Git','','',$cd.'git pull --ff-only origin main');
+    github_command_card('Обновление Git','','',$cd.'git pull --ff-only');
     echo '</div>';
     $remote=$php.' '.escapeshellarg($root.'/tools/backup_database.php').' --download';
     $download=<<<'SHELL'
