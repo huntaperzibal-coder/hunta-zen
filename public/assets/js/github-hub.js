@@ -4,6 +4,7 @@
     const button = event.target.closest('[data-copy-command]');if (!button) return;
     const source = document.getElementById(button.dataset.copyCommand);if (!source) return;
     const status = button.parentElement.querySelector('.github-copy-status');
+    const label = button.dataset.copyLabel ??= button.textContent;
     try {
       if (navigator.clipboard && window.isSecureContext) await navigator.clipboard.writeText(source.textContent);
       else {
@@ -13,7 +14,7 @@
         if (!copied) throw Error('copy');
       }
       status.textContent = '';button.textContent = 'Скопировано ✓';
-      clearTimeout(button.restoreTimer);button.restoreTimer = setTimeout(() => { button.textContent = 'Скопировать команду'; }, 1800);
+      clearTimeout(button.restoreTimer);button.restoreTimer = setTimeout(() => { button.textContent = label; }, 1800);
     } catch (_) { status.textContent = 'Выдели команду и скопируй через Ctrl+C.'; }
   });
 })();
